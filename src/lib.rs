@@ -1,0 +1,7 @@
+//! Subsonic API compatible server library.
+
+pub mod api;
+pub mod crypto;
+pub mod db;
+pub mod models;
+pub mod scanner;

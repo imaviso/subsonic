@@ -1,16 +1,19 @@
 //! Music library scanner.
 //!
 //! Walks music folders, reads audio file metadata, and populates the database.
+//! Supports incremental scanning (only changed files) and auto-scan with configurable interval.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, UNIX_EPOCH};
 
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::tag::{Accessor, ItemKey};
 use thiserror::Error;
+use tokio::sync::watch;
 use walkdir::WalkDir;
 
 use crate::db::{DbPool, MusicFolderRepository, MusicRepoError};
@@ -62,6 +65,8 @@ pub struct ScannedTrack {
     pub cover_art_data: Option<Vec<u8>>,
     /// MIME type of the embedded cover art.
     pub cover_art_mime: Option<String>,
+    /// File modification time (Unix timestamp in seconds).
+    pub file_modified_at: Option<i64>,
 }
 
 /// Result of scanning a music folder.
@@ -70,6 +75,8 @@ pub struct ScanResult {
     pub tracks_found: usize,
     pub tracks_added: usize,
     pub tracks_updated: usize,
+    pub tracks_skipped: usize,
+    pub tracks_removed: usize,
     pub tracks_failed: usize,
     pub artists_added: usize,
     pub albums_added: usize,
@@ -138,10 +145,37 @@ impl ScanState {
 /// Default cover art cache directory.
 const COVER_ART_CACHE_DIR: &str = ".cache/subsonic/covers";
 
+/// Default auto-scan interval (5 minutes).
+const DEFAULT_AUTO_SCAN_INTERVAL_SECS: u64 = 300;
+
+/// Scan mode controlling how files are scanned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScanMode {
+    /// Full scan - re-scan all files regardless of modification time.
+    Full,
+    /// Incremental scan - only scan new or modified files.
+    Incremental,
+}
+
+impl Default for ScanMode {
+    fn default() -> Self {
+        Self::Incremental
+    }
+}
+
 /// Music library scanner.
 pub struct Scanner {
     pool: DbPool,
     cover_art_dir: PathBuf,
+}
+
+/// Auto-scanner that runs periodic scans in the background.
+pub struct AutoScanner {
+    pool: DbPool,
+    cover_art_dir: PathBuf,
+    interval: Duration,
+    scan_state: Arc<ScanState>,
+    shutdown_tx: Option<watch::Sender<bool>>,
 }
 
 impl Scanner {
@@ -203,15 +237,25 @@ impl Scanner {
         &self.cover_art_dir
     }
 
-    /// Scan all enabled music folders.
+    /// Scan all enabled music folders (full scan).
     pub fn scan_all(&self) -> Result<ScanResult, ScanError> {
-        self.scan_all_with_state(None)
+        self.scan_all_with_options(None, ScanMode::Full)
+    }
+
+    /// Scan all enabled music folders (incremental - only changed files).
+    pub fn scan_all_incremental(&self) -> Result<ScanResult, ScanError> {
+        self.scan_all_with_options(None, ScanMode::Incremental)
     }
 
     /// Scan all enabled music folders with optional progress tracking.
     /// 
     /// If a ScanState is provided, the count will be updated as tracks are processed.
     pub fn scan_all_with_state(&self, state: Option<Arc<ScanState>>) -> Result<ScanResult, ScanError> {
+        self.scan_all_with_options(state, ScanMode::Full)
+    }
+
+    /// Scan all enabled music folders with optional progress tracking and scan mode.
+    pub fn scan_all_with_options(&self, state: Option<Arc<ScanState>>, mode: ScanMode) -> Result<ScanResult, ScanError> {
         let folder_repo = MusicFolderRepository::new(self.pool.clone());
         let folders = folder_repo.find_enabled()?;
 
@@ -221,13 +265,15 @@ impl Scanner {
 
         let mut total_result = ScanResult::default();
 
-        for folder in folders {
-            println!("Scanning folder: {} ({})", folder.name, folder.path);
-            match self.scan_folder_with_state(&folder, state.clone()) {
+        for folder in &folders {
+            println!("Scanning folder: {} ({}) [mode: {:?}]", folder.name, folder.path, mode);
+            match self.scan_folder_with_options(folder, state.clone(), mode) {
                 Ok(result) => {
                     total_result.tracks_found += result.tracks_found;
                     total_result.tracks_added += result.tracks_added;
                     total_result.tracks_updated += result.tracks_updated;
+                    total_result.tracks_skipped += result.tracks_skipped;
+                    total_result.tracks_removed += result.tracks_removed;
                     total_result.tracks_failed += result.tracks_failed;
                     total_result.artists_added += result.artists_added;
                     total_result.albums_added += result.albums_added;
@@ -239,27 +285,42 @@ impl Scanner {
             }
         }
 
+        // Clean up orphaned artists and albums after scanning all folders
+        if let Err(e) = self.cleanup_orphans() {
+            eprintln!("Warning: Failed to cleanup orphaned records: {}", e);
+        }
+
         Ok(total_result)
     }
 
-    /// Scan a specific music folder by ID.
+    /// Scan a specific music folder by ID (full scan).
     pub fn scan_folder_by_id(&self, folder_id: i32) -> Result<ScanResult, ScanError> {
+        self.scan_folder_by_id_with_mode(folder_id, ScanMode::Full)
+    }
+
+    /// Scan a specific music folder by ID with scan mode.
+    pub fn scan_folder_by_id_with_mode(&self, folder_id: i32, mode: ScanMode) -> Result<ScanResult, ScanError> {
         let folder_repo = MusicFolderRepository::new(self.pool.clone());
         let folder = folder_repo
             .find_by_id(folder_id)?
             .ok_or_else(|| ScanError::FolderNotFound(folder_id.to_string()))?;
 
-        println!("Scanning folder: {} ({})", folder.name, folder.path);
-        self.scan_folder_with_state(&folder, None)
+        println!("Scanning folder: {} ({}) [mode: {:?}]", folder.name, folder.path, mode);
+        self.scan_folder_with_options(&folder, None, mode)
     }
 
-    /// Scan a single music folder.
+    /// Scan a single music folder (full scan).
     fn scan_folder(&self, folder: &MusicFolder) -> Result<ScanResult, ScanError> {
-        self.scan_folder_with_state(folder, None)
+        self.scan_folder_with_options(folder, None, ScanMode::Full)
     }
 
     /// Scan a single music folder with optional progress tracking.
     fn scan_folder_with_state(&self, folder: &MusicFolder, state: Option<Arc<ScanState>>) -> Result<ScanResult, ScanError> {
+        self.scan_folder_with_options(folder, state, ScanMode::Full)
+    }
+
+    /// Scan a single music folder with optional progress tracking and scan mode.
+    fn scan_folder_with_options(&self, folder: &MusicFolder, state: Option<Arc<ScanState>>, mode: ScanMode) -> Result<ScanResult, ScanError> {
         let mut result = ScanResult::default();
         let folder_path = Path::new(&folder.path);
 
@@ -267,23 +328,94 @@ impl Scanner {
             return Err(ScanError::FolderNotFound(folder.path.clone()));
         }
 
-        // Collect all audio files
-        let tracks = self.discover_tracks(folder_path, folder)?;
+        // Get existing songs in this folder for incremental scanning
+        let existing_songs = self.get_existing_songs(folder.id)?;
+
+        // Collect all audio files on disk
+        let (tracks, discovered_paths) = self.discover_tracks_with_paths(folder_path, folder)?;
         result.tracks_found = tracks.len();
 
-        println!("  Found {} audio files", tracks.len());
+        println!("  Found {} audio files on disk", tracks.len());
+
+        // Find deleted files (in database but not on disk)
+        let deleted_paths: Vec<_> = existing_songs
+            .keys()
+            .filter(|path| !discovered_paths.contains(*path))
+            .cloned()
+            .collect();
+
+        if !deleted_paths.is_empty() {
+            println!("  Removing {} deleted files from database", deleted_paths.len());
+            result.tracks_removed = self.remove_deleted_songs(&deleted_paths)?;
+        }
 
         // Process tracks and populate database
-        let (artists_added, albums_added, tracks_added, tracks_failed, cover_art_saved) =
-            self.process_tracks_with_state(folder, tracks, state)?;
+        let (artists_added, albums_added, tracks_added, tracks_updated, tracks_skipped, tracks_failed, cover_art_saved) =
+            self.process_tracks_with_options(folder, tracks, &existing_songs, state, mode)?;
 
         result.artists_added = artists_added;
         result.albums_added = albums_added;
         result.tracks_added = tracks_added;
+        result.tracks_updated = tracks_updated;
+        result.tracks_skipped = tracks_skipped;
         result.tracks_failed = tracks_failed;
         result.cover_art_saved = cover_art_saved;
 
         Ok(result)
+    }
+
+    /// Get existing songs in a folder from the database.
+    /// Returns a map of path -> (id, file_modified_at).
+    fn get_existing_songs(&self, folder_id: i32) -> Result<HashMap<String, (i32, Option<i64>)>, ScanError> {
+        use crate::db::schema::songs;
+        use diesel::prelude::*;
+
+        let mut conn = self.pool.get().map_err(MusicRepoError::Pool)?;
+
+        let existing: Vec<(i32, String, Option<i64>)> = songs::table
+            .filter(songs::music_folder_id.eq(folder_id))
+            .select((songs::id, songs::path, songs::file_modified_at))
+            .load(&mut conn)
+            .map_err(MusicRepoError::Database)?;
+
+        Ok(existing.into_iter().map(|(id, path, mtime)| (path, (id, mtime))).collect())
+    }
+
+    /// Remove songs that no longer exist on disk.
+    fn remove_deleted_songs(&self, paths: &[String]) -> Result<usize, ScanError> {
+        use crate::db::schema::songs;
+        use diesel::prelude::*;
+
+        let mut conn = self.pool.get().map_err(MusicRepoError::Pool)?;
+
+        let deleted = diesel::delete(songs::table.filter(songs::path.eq_any(paths)))
+            .execute(&mut conn)
+            .map_err(MusicRepoError::Database)?;
+
+        Ok(deleted)
+    }
+
+    /// Clean up orphaned artists and albums (those with no songs).
+    fn cleanup_orphans(&self) -> Result<(), ScanError> {
+        use diesel::prelude::*;
+
+        let mut conn = self.pool.get().map_err(MusicRepoError::Pool)?;
+
+        // Delete albums with no songs
+        diesel::sql_query(
+            "DELETE FROM albums WHERE id NOT IN (SELECT DISTINCT album_id FROM songs WHERE album_id IS NOT NULL)"
+        )
+        .execute(&mut conn)
+        .map_err(MusicRepoError::Database)?;
+
+        // Delete artists with no songs and no albums
+        diesel::sql_query(
+            "DELETE FROM artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM songs WHERE artist_id IS NOT NULL) AND id NOT IN (SELECT DISTINCT artist_id FROM albums WHERE artist_id IS NOT NULL)"
+        )
+        .execute(&mut conn)
+        .map_err(MusicRepoError::Database)?;
+
+        Ok(())
     }
 
     /// Discover all audio files in a directory.
@@ -292,7 +424,18 @@ impl Scanner {
         folder_path: &Path,
         folder: &MusicFolder,
     ) -> Result<Vec<ScannedTrack>, ScanError> {
+        let (tracks, _) = self.discover_tracks_with_paths(folder_path, folder)?;
+        Ok(tracks)
+    }
+
+    /// Discover all audio files in a directory, also returning the set of discovered paths.
+    fn discover_tracks_with_paths(
+        &self,
+        folder_path: &Path,
+        folder: &MusicFolder,
+    ) -> Result<(Vec<ScannedTrack>, HashSet<String>), ScanError> {
         let mut tracks = Vec::new();
+        let mut paths = HashSet::new();
 
         for entry in WalkDir::new(folder_path)
             .follow_links(true)
@@ -317,6 +460,9 @@ impl Scanner {
                 _ => continue,
             };
 
+            let path_str = path.to_string_lossy().to_string();
+            paths.insert(path_str);
+
             // Try to read metadata
             match self.read_track_metadata(path, &extension, folder) {
                 Ok(track) => tracks.push(track),
@@ -326,7 +472,7 @@ impl Scanner {
             }
         }
 
-        Ok(tracks)
+        Ok((tracks, paths))
     }
 
     /// Read metadata from a single audio file.
@@ -338,6 +484,13 @@ impl Scanner {
     ) -> Result<ScannedTrack, Box<dyn std::error::Error>> {
         let metadata = fs::metadata(path)?;
         let file_size = metadata.len();
+
+        // Get file modification time
+        let file_modified_at = metadata
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64);
 
         // Get parent path relative to music folder
         let parent_path = path
@@ -440,6 +593,7 @@ impl Scanner {
             channels,
             cover_art_data,
             cover_art_mime,
+            file_modified_at,
         })
     }
 
@@ -448,8 +602,8 @@ impl Scanner {
         &self,
         folder: &MusicFolder,
         tracks: Vec<ScannedTrack>,
-    ) -> Result<(usize, usize, usize, usize, usize), ScanError> {
-        self.process_tracks_with_state(folder, tracks, None)
+    ) -> Result<(usize, usize, usize, usize, usize, usize, usize), ScanError> {
+        self.process_tracks_with_options(folder, tracks, &HashMap::new(), None, ScanMode::Full)
     }
 
     /// Process scanned tracks and populate the database with optional progress tracking.
@@ -458,7 +612,20 @@ impl Scanner {
         folder: &MusicFolder,
         tracks: Vec<ScannedTrack>,
         state: Option<Arc<ScanState>>,
-    ) -> Result<(usize, usize, usize, usize, usize), ScanError> {
+    ) -> Result<(usize, usize, usize, usize, usize, usize, usize), ScanError> {
+        self.process_tracks_with_options(folder, tracks, &HashMap::new(), state, ScanMode::Full)
+    }
+
+    /// Process scanned tracks and populate the database with options.
+    /// Returns (artists_added, albums_added, tracks_added, tracks_updated, tracks_skipped, tracks_failed, cover_art_saved)
+    fn process_tracks_with_options(
+        &self,
+        folder: &MusicFolder,
+        tracks: Vec<ScannedTrack>,
+        existing_songs: &HashMap<String, (i32, Option<i64>)>,
+        state: Option<Arc<ScanState>>,
+        mode: ScanMode,
+    ) -> Result<(usize, usize, usize, usize, usize, usize, usize), ScanError> {
         use crate::db::schema::{albums, artists, songs};
         use diesel::prelude::*;
 
@@ -476,10 +643,30 @@ impl Scanner {
         let mut artists_added = 0;
         let mut albums_added = 0;
         let mut tracks_added = 0;
+        let mut tracks_updated = 0;
+        let mut tracks_skipped = 0;
         let mut tracks_failed = 0;
         let mut cover_art_saved = 0;
 
         for track in tracks {
+            let path_str = track.path.to_string_lossy().to_string();
+
+            // For incremental scan, check if the file has changed
+            if mode == ScanMode::Incremental {
+                if let Some((_, stored_mtime)) = existing_songs.get(&path_str) {
+                    // File exists in database, check if it's unchanged
+                    if let (Some(stored), Some(current)) = (stored_mtime, track.file_modified_at) {
+                        if *stored == current {
+                            // File hasn't changed, skip processing
+                            tracks_skipped += 1;
+                            if let Some(ref state) = state {
+                                state.increment_count();
+                            }
+                            continue;
+                        }
+                    }
+                }
+            }
             // Get or create artist
             let artist_name = track
                 .album_artist
@@ -629,9 +816,6 @@ impl Scanner {
             // For songs, use the album's cover art hash
             let song_cover_art = album_cover_art_id;
 
-            // Insert or update song
-            let path_str = track.path.to_string_lossy().to_string();
-
             // Check if song already exists
             let existing_song: Option<i32> = songs::table
                 .filter(songs::path.eq(&path_str))
@@ -640,7 +824,8 @@ impl Scanner {
                 .optional()
                 .map_err(MusicRepoError::Database)?;
 
-            let result = if existing_song.is_some() {
+            let is_update = existing_song.is_some();
+            let result = if is_update {
                 // Update existing song
                 diesel::update(songs::table.filter(songs::path.eq(&path_str)))
                     .set((
@@ -660,6 +845,7 @@ impl Scanner {
                         songs::year.eq(track.year.map(|y| y as i32)),
                         songs::genre.eq(&track.genre),
                         songs::cover_art.eq(&song_cover_art),
+                        songs::file_modified_at.eq(track.file_modified_at),
                         songs::updated_at.eq(diesel::dsl::now),
                     ))
                     .execute(&mut conn)
@@ -688,12 +874,19 @@ impl Scanner {
                         songs::year.eq(track.year.map(|y| y as i32)),
                         songs::genre.eq(&track.genre),
                         songs::cover_art.eq(&song_cover_art),
+                        songs::file_modified_at.eq(track.file_modified_at),
                     ))
                     .execute(&mut conn)
             };
 
             match result {
-                Ok(_) => tracks_added += 1,
+                Ok(_) => {
+                    if is_update {
+                        tracks_updated += 1;
+                    } else {
+                        tracks_added += 1;
+                    }
+                }
                 Err(e) => {
                     eprintln!("  Failed to insert {}: {}", path_str, e);
                     tracks_failed += 1;
@@ -709,7 +902,7 @@ impl Scanner {
         // Update album song counts and durations
         self.update_album_stats(&mut conn)?;
 
-        Ok((artists_added, albums_added, tracks_added, tracks_failed, cover_art_saved))
+        Ok((artists_added, albums_added, tracks_added, tracks_updated, tracks_skipped, tracks_failed, cover_art_saved))
     }
 
     /// Update album statistics (song count, duration) based on songs.
@@ -729,5 +922,140 @@ impl Scanner {
         .map_err(MusicRepoError::Database)?;
 
         Ok(())
+    }
+}
+
+impl AutoScanner {
+    /// Create a new auto-scanner with default interval (5 minutes).
+    pub fn new(pool: DbPool, scan_state: Arc<ScanState>) -> Self {
+        let cover_art_dir = dirs::home_dir()
+            .map(|h| h.join(COVER_ART_CACHE_DIR))
+            .unwrap_or_else(|| PathBuf::from(COVER_ART_CACHE_DIR));
+
+        Self {
+            pool,
+            cover_art_dir,
+            interval: Duration::from_secs(DEFAULT_AUTO_SCAN_INTERVAL_SECS),
+            scan_state,
+            shutdown_tx: None,
+        }
+    }
+
+    /// Create a new auto-scanner with a custom interval.
+    pub fn with_interval(pool: DbPool, scan_state: Arc<ScanState>, interval_secs: u64) -> Self {
+        let cover_art_dir = dirs::home_dir()
+            .map(|h| h.join(COVER_ART_CACHE_DIR))
+            .unwrap_or_else(|| PathBuf::from(COVER_ART_CACHE_DIR));
+
+        Self {
+            pool,
+            cover_art_dir,
+            interval: Duration::from_secs(interval_secs),
+            scan_state,
+            shutdown_tx: None,
+        }
+    }
+
+    /// Start the auto-scanner in the background.
+    /// Returns a handle that can be used to stop the scanner.
+    pub fn start(&mut self) -> AutoScanHandle {
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        self.shutdown_tx = Some(shutdown_tx.clone());
+
+        let pool = self.pool.clone();
+        let cover_art_dir = self.cover_art_dir.clone();
+        let interval = self.interval;
+        let scan_state = self.scan_state.clone();
+
+        tokio::spawn(async move {
+            Self::run_scan_loop(pool, cover_art_dir, interval, scan_state, shutdown_rx).await;
+        });
+
+        AutoScanHandle { shutdown_tx }
+    }
+
+    /// Run the scan loop.
+    async fn run_scan_loop(
+        pool: DbPool,
+        cover_art_dir: PathBuf,
+        interval: Duration,
+        scan_state: Arc<ScanState>,
+        mut shutdown_rx: watch::Receiver<bool>,
+    ) {
+        tracing::info!("Auto-scanner started with interval {:?}", interval);
+
+        loop {
+            // Wait for the interval or shutdown signal
+            tokio::select! {
+                _ = tokio::time::sleep(interval) => {
+                    // Time to scan
+                }
+                _ = shutdown_rx.changed() => {
+                    if *shutdown_rx.borrow() {
+                        tracing::info!("Auto-scanner received shutdown signal");
+                        break;
+                    }
+                }
+            }
+
+            // Try to start a scan (skip if one is already in progress)
+            if !scan_state.try_start() {
+                tracing::debug!("Skipping auto-scan: scan already in progress");
+                continue;
+            }
+
+            tracing::info!("Starting auto-scan (incremental)");
+            scan_state.reset_count();
+
+            // Run the scan in a blocking task since it uses diesel
+            let pool_clone = pool.clone();
+            let cover_art_dir_clone = cover_art_dir.clone();
+            let scan_state_clone = scan_state.clone();
+
+            let result = tokio::task::spawn_blocking(move || {
+                let scanner = Scanner::with_cover_art_dir(pool_clone, cover_art_dir_clone);
+                scanner.scan_all_with_options(Some(scan_state_clone), ScanMode::Incremental)
+            })
+            .await;
+
+            scan_state.finish();
+
+            match result {
+                Ok(Ok(stats)) => {
+                    tracing::info!(
+                        "Auto-scan complete: found={}, added={}, updated={}, skipped={}, removed={}, failed={}",
+                        stats.tracks_found,
+                        stats.tracks_added,
+                        stats.tracks_updated,
+                        stats.tracks_skipped,
+                        stats.tracks_removed,
+                        stats.tracks_failed
+                    );
+                }
+                Ok(Err(ScanError::NoMusicFolders)) => {
+                    tracing::debug!("Auto-scan skipped: no music folders configured");
+                }
+                Ok(Err(e)) => {
+                    tracing::error!("Auto-scan failed: {}", e);
+                }
+                Err(e) => {
+                    tracing::error!("Auto-scan task panicked: {}", e);
+                }
+            }
+        }
+
+        tracing::info!("Auto-scanner stopped");
+    }
+}
+
+/// Handle for controlling the auto-scanner.
+pub struct AutoScanHandle {
+    shutdown_tx: watch::Sender<bool>,
+}
+
+impl AutoScanHandle {
+    /// Stop the auto-scanner.
+    pub fn stop(&self) {
+        let _ = self.shutdown_tx.send(true);
     }
 }

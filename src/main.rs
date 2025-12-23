@@ -14,7 +14,7 @@ use subsonic::api::{handlers, AuthState, DatabaseAuthState, SubsonicRouterExt};
 use subsonic::crypto::hash_password;
 use subsonic::db::{run_migrations, DbConfig, DbPool, MusicFolderRepository, NewUser, UserRepository};
 use subsonic::models::music::NewMusicFolder;
-use subsonic::scanner::Scanner;
+use subsonic::scanner::{AutoScanner, ScanMode, ScanState, Scanner};
 
 /// Subsonic-compatible music streaming server.
 #[derive(Parser)]
@@ -97,10 +97,22 @@ enum Commands {
         /// Specific folder ID to scan (scans all if not specified)
         #[arg(short, long)]
         folder: Option<i32>,
+
+        /// Run full scan (re-scan all files regardless of modification time)
+        #[arg(long)]
+        full: bool,
     },
 
     /// Start the server (default)
-    Serve,
+    Serve {
+        /// Enable auto-scan (periodic incremental scanning)
+        #[arg(long)]
+        auto_scan: bool,
+
+        /// Auto-scan interval in seconds (default: 300 = 5 minutes)
+        #[arg(long, default_value = "300")]
+        auto_scan_interval: u64,
+    },
 }
 
 /// Application state shared across all handlers.
@@ -390,12 +402,14 @@ async fn main() {
                 }
             }
         }
-        Some(Commands::Scan { folder }) => {
+        Some(Commands::Scan { folder, full }) => {
             let scanner = Scanner::new(pool.clone());
+            let mode = if full { ScanMode::Full } else { ScanMode::Incremental };
+            
             let result = if let Some(folder_id) = folder {
-                scanner.scan_folder_by_id(folder_id)
+                scanner.scan_folder_by_id_with_mode(folder_id, mode)
             } else {
-                scanner.scan_all()
+                scanner.scan_all_with_options(None, mode)
             };
 
             match result {
@@ -404,6 +418,8 @@ async fn main() {
                     println!("  Tracks found:     {}", stats.tracks_found);
                     println!("  Tracks added:     {}", stats.tracks_added);
                     println!("  Tracks updated:   {}", stats.tracks_updated);
+                    println!("  Tracks skipped:   {}", stats.tracks_skipped);
+                    println!("  Tracks removed:   {}", stats.tracks_removed);
                     println!("  Tracks failed:    {}", stats.tracks_failed);
                     println!("  Artists added:    {}", stats.artists_added);
                     println!("  Albums added:     {}", stats.albums_added);
@@ -415,22 +431,40 @@ async fn main() {
                 }
             }
         }
-        Some(Commands::Serve) | None => {
-            // Check if there are any users
-            let repo = UserRepository::new(pool.clone());
-            if !repo.has_users().unwrap_or(false) {
-                tracing::warn!("No users found in database. Create one with:");
-                tracing::warn!("  subsonic create-user --username admin --password <password> --admin");
-            }
-
-            let state = AppState::new(pool);
-            let app = create_router(state);
-
-            let addr = format!("0.0.0.0:{}", cli.port);
-            let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-            tracing::info!("Subsonic server listening on {}", listener.local_addr().unwrap());
-
-            axum::serve(listener, app).await.unwrap();
+        Some(Commands::Serve { auto_scan, auto_scan_interval }) => {
+            run_server(pool, cli.port, auto_scan, auto_scan_interval).await;
+        }
+        None => {
+            // Default: start server without auto-scan
+            run_server(pool, cli.port, false, 300).await;
         }
     }
+}
+
+async fn run_server(pool: DbPool, port: u16, auto_scan: bool, auto_scan_interval: u64) {
+    // Check if there are any users
+    let repo = UserRepository::new(pool.clone());
+    if !repo.has_users().unwrap_or(false) {
+        tracing::warn!("No users found in database. Create one with:");
+        tracing::warn!("  subsonic create-user --username admin --password <password> --admin");
+    }
+
+    let state = AppState::new(pool.clone());
+    let app = create_router(state);
+
+    // Start auto-scanner if enabled
+    let _auto_scan_handle = if auto_scan {
+        let scan_state = Arc::new(ScanState::new());
+        let mut auto_scanner = AutoScanner::with_interval(pool, scan_state, auto_scan_interval);
+        tracing::info!("Auto-scan enabled with interval {} seconds", auto_scan_interval);
+        Some(auto_scanner.start())
+    } else {
+        None
+    };
+
+    let addr = format!("0.0.0.0:{}", port);
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    tracing::info!("Subsonic server listening on {}", listener.local_addr().unwrap());
+
+    axum::serve(listener, app).await.unwrap();
 }

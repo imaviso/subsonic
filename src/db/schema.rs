@@ -96,6 +96,7 @@ diesel::table! {
         cover_art -> Nullable<Text>,
         musicbrainz_id -> Nullable<Text>,
         play_count -> Integer,
+        file_modified_at -> Nullable<BigInt>,
         created_at -> Timestamp,
         updated_at -> Timestamp,
     }

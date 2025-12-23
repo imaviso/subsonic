@@ -209,12 +209,24 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result:
             cover_art TEXT,
             musicbrainz_id TEXT,
             play_count INTEGER NOT NULL DEFAULT 0,
+            file_modified_at BIGINT,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
         "#,
     )
     .execute(conn)?;
+
+    // Migration: Add file_modified_at column if it doesn't exist (for existing databases)
+    let has_file_modified_at: Result<i32, _> = diesel::sql_query(
+        "SELECT COUNT(*) as cnt FROM pragma_table_info('songs') WHERE name = 'file_modified_at'"
+    )
+    .get_result::<CountResult>(conn)
+    .map(|r| r.cnt);
+
+    if has_file_modified_at.unwrap_or(0) == 0 {
+        let _ = diesel::sql_query("ALTER TABLE songs ADD COLUMN file_modified_at BIGINT").execute(conn);
+    }
 
     diesel::sql_query(
         "CREATE INDEX IF NOT EXISTS idx_songs_title ON songs(title)"

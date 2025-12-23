@@ -1,2 +1,4 @@
 /target
+*.o
+*.db
 /open-subsonic-api

@@ -134,6 +134,7 @@ fn create_router(state: AppState) -> Router {
         .subsonic_route("/ping", handlers::ping)
         .subsonic_route("/getLicense", handlers::get_license)
         .subsonic_route("/getOpenSubsonicExtensions", handlers::get_open_subsonic_extensions)
+        .subsonic_route("/tokenInfo", handlers::token_info)
         // Bookmarks endpoints
         .subsonic_route("/getBookmarks", handlers::get_bookmarks)
         // Browsing endpoints
@@ -181,6 +182,9 @@ fn create_router(state: AppState) -> Router {
         // Play queue endpoints
         .subsonic_route("/getPlayQueue", handlers::get_play_queue)
         .subsonic_route("/savePlayQueue", handlers::save_play_queue)
+        // Play queue by index endpoints (OpenSubsonic extension)
+        .subsonic_route("/getPlayQueueByIndex", handlers::get_play_queue_by_index)
+        .subsonic_route("/savePlayQueueByIndex", handlers::save_play_queue_by_index)
         // Media retrieval endpoints
         .subsonic_route("/stream", handlers::stream)
         .subsonic_route("/download", handlers::download)

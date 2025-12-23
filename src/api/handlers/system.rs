@@ -1,9 +1,10 @@
-//! System-related API handlers (ping, getLicense, getOpenSubsonicExtensions, etc.)
+//! System-related API handlers (ping, getLicense, getOpenSubsonicExtensions, tokenInfo, etc.)
 
 use axum::response::IntoResponse;
 
 use crate::api::auth::SubsonicAuth;
-use crate::api::response::{ok_bookmarks, ok_empty, ok_license, ok_open_subsonic_extensions};
+use crate::api::response::{ok_bookmarks, ok_empty, ok_license, ok_open_subsonic_extensions, ok_token_info};
+use crate::models::music::TokenInfoResponse;
 
 /// GET/POST /rest/ping[.view]
 ///
@@ -36,4 +37,17 @@ pub async fn get_open_subsonic_extensions(auth: SubsonicAuth) -> impl IntoRespon
 /// Currently returns an empty list (bookmarks not yet implemented).
 pub async fn get_bookmarks(auth: SubsonicAuth) -> impl IntoResponse {
     ok_bookmarks(auth.format)
+}
+
+/// GET/POST /rest/tokenInfo[.view]
+///
+/// Returns information about the API key used for authentication.
+/// This is an OpenSubsonic extension.
+///
+/// Returns the username associated with the API key.
+pub async fn token_info(auth: SubsonicAuth) -> impl IntoResponse {
+    let response = TokenInfoResponse {
+        username: auth.user.username.clone(),
+    };
+    ok_token_info(auth.format, response)
 }

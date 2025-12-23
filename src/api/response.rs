@@ -15,7 +15,8 @@ use crate::models::music::{
     ArtistInfo2Response, ArtistInfoResponse, ArtistWithAlbumsID3Response, ArtistsID3Response,
     ChildResponse, DirectoryResponse, GenresResponse, IndexesResponse, LyricsResponse,
     MusicFolderResponse, NowPlayingResponse, PlaylistWithSongsResponse, PlaylistsResponse,
-    PlayQueueResponse, RandomSongsResponse, SearchResult2Response, SearchResult3Response,
+    PlayQueueByIndexResponse, PlayQueueResponse, RandomSongsResponse, SearchResult2Response,
+    SearchResult3Response, TokenInfoResponse,
     SearchResultResponse, SimilarSongs2Response, SimilarSongsResponse, SongsByGenreResponse,
     Starred2Response, StarredResponse, TopSongsResponse,
 };
@@ -780,6 +781,72 @@ mod xml {
 
     #[derive(Debug, Serialize)]
     #[serde(rename = "subsonic-response")]
+    pub struct PlayQueueByIndexResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "playQueueByIndex")]
+        pub play_queue_by_index: super::PlayQueueByIndexResponse,
+    }
+
+    impl PlayQueueByIndexResponse {
+        pub fn new(play_queue_by_index: super::PlayQueueByIndexResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                play_queue_by_index,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct TokenInfoResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "tokenInfo")]
+        pub token_info: super::TokenInfoResponse,
+    }
+
+    impl TokenInfoResponse {
+        pub fn new(token_info: super::TokenInfoResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                token_info,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
     pub struct UserResponse {
         #[serde(rename = "@xmlns")]
         pub xmlns: &'static str,
@@ -1375,6 +1442,10 @@ mod json {
         pub playlist: Option<super::PlaylistWithSongsResponse>,
         #[serde(skip_serializing_if = "Option::is_none", rename = "playQueue")]
         pub play_queue: Option<super::PlayQueueResponse>,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "playQueueByIndex")]
+        pub play_queue_by_index: Option<super::PlayQueueByIndexResponse>,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "tokenInfo")]
+        pub token_info: Option<super::TokenInfoResponse>,
         #[serde(skip_serializing_if = "Option::is_none")]
         pub user: Option<super::UserResponse>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -1471,6 +1542,8 @@ mod json {
                 playlists: None,
                 playlist: None,
                 play_queue: None,
+                play_queue_by_index: None,
+                token_info: None,
                 user: None,
                 users: None,
                 scan_status: None,
@@ -1516,6 +1589,8 @@ mod json {
                 playlists: None,
                 playlist: None,
                 play_queue: None,
+                play_queue_by_index: None,
+                token_info: None,
                 user: None,
                 users: None,
                 scan_status: None,
@@ -1622,6 +1697,16 @@ mod json {
 
         pub fn with_play_queue(mut self, play_queue: super::PlayQueueResponse) -> Self {
             self.play_queue = Some(play_queue);
+            self
+        }
+
+        pub fn with_play_queue_by_index(mut self, play_queue_by_index: super::PlayQueueByIndexResponse) -> Self {
+            self.play_queue_by_index = Some(play_queue_by_index);
+            self
+        }
+
+        pub fn with_token_info(mut self, token_info: super::TokenInfoResponse) -> Self {
+            self.token_info = Some(token_info);
             self
         }
 
@@ -1744,6 +1829,8 @@ enum ResponseKind {
     Playlists(PlaylistsResponse),
     Playlist(PlaylistWithSongsResponse),
     PlayQueue(PlayQueueResponse),
+    PlayQueueByIndex(PlayQueueByIndexResponse),
+    TokenInfo(TokenInfoResponse),
     User(UserResponse),
     Users(UsersResponse),
     ScanStatus { scanning: bool, count: u64 },
@@ -1904,6 +1991,20 @@ impl SubsonicResponse {
         Self {
             format,
             kind: ResponseKind::PlayQueue(play_queue),
+        }
+    }
+
+    pub fn play_queue_by_index(format: Format, play_queue_by_index: PlayQueueByIndexResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::PlayQueueByIndex(play_queue_by_index),
+        }
+    }
+
+    pub fn token_info(format: Format, token_info: TokenInfoResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::TokenInfo(token_info),
         }
     }
 
@@ -2095,6 +2196,12 @@ impl SubsonicResponse {
             ResponseKind::PlayQueue(play_queue) => {
                 quick_xml::se::to_string(&xml::PlayQueueResponse::new(play_queue))
             }
+            ResponseKind::PlayQueueByIndex(play_queue_by_index) => {
+                quick_xml::se::to_string(&xml::PlayQueueByIndexResponse::new(play_queue_by_index))
+            }
+            ResponseKind::TokenInfo(token_info) => {
+                quick_xml::se::to_string(&xml::TokenInfoResponse::new(token_info))
+            }
             ResponseKind::User(user) => {
                 quick_xml::se::to_string(&xml::UserResponse::new(user))
             }
@@ -2220,6 +2327,12 @@ impl SubsonicResponse {
             }
             ResponseKind::PlayQueue(play_queue) => {
                 json::SubsonicResponse::ok().with_play_queue(play_queue).wrap()
+            }
+            ResponseKind::PlayQueueByIndex(play_queue_by_index) => {
+                json::SubsonicResponse::ok().with_play_queue_by_index(play_queue_by_index).wrap()
+            }
+            ResponseKind::TokenInfo(token_info) => {
+                json::SubsonicResponse::ok().with_token_info(token_info).wrap()
             }
             ResponseKind::User(user) => {
                 json::SubsonicResponse::ok().with_user(user).wrap()
@@ -2431,6 +2544,16 @@ pub fn ok_playlist(format: Format, playlist: PlaylistWithSongsResponse) -> Subso
 /// Helper function to create a play queue response.
 pub fn ok_play_queue(format: Format, play_queue: PlayQueueResponse) -> SubsonicResponse {
     SubsonicResponse::play_queue(format, play_queue)
+}
+
+/// Helper function to create a play queue by index response (OpenSubsonic).
+pub fn ok_play_queue_by_index(format: Format, play_queue_by_index: PlayQueueByIndexResponse) -> SubsonicResponse {
+    SubsonicResponse::play_queue_by_index(format, play_queue_by_index)
+}
+
+/// Helper function to create a token info response (OpenSubsonic).
+pub fn ok_token_info(format: Format, token_info: TokenInfoResponse) -> SubsonicResponse {
+    SubsonicResponse::token_info(format, token_info)
 }
 
 /// Helper function to create a user response.

@@ -1035,6 +1035,32 @@ pub struct PlayQueueResponse {
     pub entries: Vec<ChildResponse>,
 }
 
+/// Play queue by index response for getPlayQueueByIndex (OpenSubsonic).
+/// Uses currentIndex instead of current (song ID).
+#[derive(Debug, Serialize, Clone)]
+pub struct PlayQueueByIndexResponse {
+    #[serde(rename = "@currentIndex", skip_serializing_if = "Option::is_none")]
+    pub current_index: Option<i32>,
+    #[serde(rename = "@position", skip_serializing_if = "Option::is_none")]
+    pub position: Option<i64>,
+    #[serde(rename = "@username")]
+    pub username: String,
+    #[serde(rename = "@changed")]
+    pub changed: String,
+    #[serde(rename = "@changedBy", skip_serializing_if = "Option::is_none")]
+    pub changed_by: Option<String>,
+    #[serde(rename = "entry", skip_serializing_if = "Vec::is_empty")]
+    pub entries: Vec<ChildResponse>,
+}
+
+/// Token info response for tokenInfo (OpenSubsonic).
+/// Returns information about the API key used for authentication.
+#[derive(Debug, Serialize, Clone)]
+pub struct TokenInfoResponse {
+    #[serde(rename = "@username")]
+    pub username: String,
+}
+
 // ============================================================================
 // Response types for getArtistInfo2, getAlbumInfo2, getSimilarSongs2, getTopSongs
 // ============================================================================

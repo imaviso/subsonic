@@ -166,11 +166,20 @@ pub async fn get_album(
         }
     };
 
-    // Get songs for the album
-    let songs = auth.state.get_songs_by_album(album_id);
-    let song_responses: Vec<ChildResponse> = songs.iter().map(ChildResponse::from).collect();
+    // Get the album's starred status
+    let album_starred_at = auth.state.get_starred_at_for_album(auth.user.id, album_id);
 
-    let response = AlbumWithSongsID3Response::from_album_and_songs(&album, song_responses);
+    // Get songs for the album with their starred status
+    let songs = auth.state.get_songs_by_album(album_id);
+    let song_responses: Vec<ChildResponse> = songs
+        .iter()
+        .map(|song| {
+            let starred_at = auth.state.get_starred_at_for_song(auth.user.id, song.id);
+            ChildResponse::from_song_with_starred(song, starred_at.as_ref())
+        })
+        .collect();
+
+    let response = AlbumWithSongsID3Response::from_album_and_songs_with_starred(&album, song_responses, album_starred_at.as_ref());
     ok_album(auth.format, response).into_response()
 }
 
@@ -199,11 +208,20 @@ pub async fn get_artist(
         }
     };
 
-    // Get albums for the artist
-    let albums = auth.state.get_albums_by_artist(artist_id);
-    let album_responses: Vec<AlbumID3Response> = albums.iter().map(AlbumID3Response::from).collect();
+    // Get the artist's starred status
+    let artist_starred_at = auth.state.get_starred_at_for_artist(auth.user.id, artist_id);
 
-    let response = ArtistWithAlbumsID3Response::from_artist_and_albums(&artist, album_responses);
+    // Get albums for the artist with their starred status
+    let albums = auth.state.get_albums_by_artist(artist_id);
+    let album_responses: Vec<AlbumID3Response> = albums
+        .iter()
+        .map(|album| {
+            let starred_at = auth.state.get_starred_at_for_album(auth.user.id, album.id);
+            AlbumID3Response::from_album_with_starred(album, starred_at.as_ref())
+        })
+        .collect();
+
+    let response = ArtistWithAlbumsID3Response::from_artist_and_albums_with_starred(&artist, album_responses, artist_starred_at.as_ref());
     ok_artist(auth.format, response).into_response()
 }
 
@@ -232,7 +250,9 @@ pub async fn get_song(
         }
     };
 
-    let response = ChildResponse::from(&song);
+    // Get the song's starred status
+    let starred_at = auth.state.get_starred_at_for_song(auth.user.id, song_id);
+    let response = ChildResponse::from_song_with_starred(&song, starred_at.as_ref());
     ok_song(auth.format, response).into_response()
 }
 
@@ -403,17 +423,33 @@ pub async fn search3(
     let albums = auth.state.search_albums(query, album_offset, album_count);
     let songs = auth.state.search_songs(query, song_offset, song_count);
 
-    // Convert to response types
+    // Convert to response types with starred status
+    let user_id = auth.user.id;
+    
     let artist_responses: Vec<ArtistID3Response> = artists
         .iter()
         .map(|a| {
             let album_count = auth.state.get_artist_album_count(a.id);
-            ArtistID3Response::from_artist(a, Some(album_count as i32))
+            let starred_at = auth.state.get_starred_at_for_artist(user_id, a.id);
+            ArtistID3Response::from_artist_with_starred(a, Some(album_count as i32), starred_at.as_ref())
         })
         .collect();
 
-    let album_responses: Vec<AlbumID3Response> = albums.iter().map(AlbumID3Response::from).collect();
-    let song_responses: Vec<ChildResponse> = songs.iter().map(ChildResponse::from).collect();
+    let album_responses: Vec<AlbumID3Response> = albums
+        .iter()
+        .map(|a| {
+            let starred_at = auth.state.get_starred_at_for_album(user_id, a.id);
+            AlbumID3Response::from_album_with_starred(a, starred_at.as_ref())
+        })
+        .collect();
+
+    let song_responses: Vec<ChildResponse> = songs
+        .iter()
+        .map(|s| {
+            let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
+            ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+        })
+        .collect();
 
     let response = SearchResult3Response {
         artists: artist_responses,

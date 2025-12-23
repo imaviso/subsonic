@@ -7,5 +7,6 @@ pub mod schema;
 pub use connection::{run_migrations, DbConfig, DbConn, DbPool};
 pub use repository::{
     AlbumRepository, ArtistRepository, MusicFolderRepository, MusicRepoError,
-    NewUser, SongRepository, UserRepoError, UserRepository,
+    NewUser, NowPlayingEntry, NowPlayingRepository, ScrobbleRepository,
+    SongRepository, StarredRepository, UserRepoError, UserRepository,
 };

@@ -34,7 +34,7 @@ use serde::Deserialize;
 
 use super::error::ApiError;
 use super::response::{error_response, Format};
-use crate::db::{DbPool, UserRepository, MusicFolderRepository, ArtistRepository, SongRepository, AlbumRepository};
+use crate::db::{DbPool, UserRepository, MusicFolderRepository, ArtistRepository, SongRepository, AlbumRepository, StarredRepository, NowPlayingRepository, ScrobbleRepository, NowPlayingEntry};
 use crate::models::User;
 use crate::models::music::{MusicFolder, Artist, Song, Album};
 use chrono::NaiveDateTime;
@@ -93,6 +93,40 @@ pub trait AuthState: Send + Sync + 'static {
     fn search_albums(&self, query: &str, offset: i64, limit: i64) -> Vec<Album>;
     /// Search songs by title.
     fn search_songs(&self, query: &str, offset: i64, limit: i64) -> Vec<Song>;
+
+    // Starred methods
+    /// Star an artist for a user.
+    fn star_artist(&self, user_id: i32, artist_id: i32) -> Result<(), String>;
+    /// Star an album for a user.
+    fn star_album(&self, user_id: i32, album_id: i32) -> Result<(), String>;
+    /// Star a song for a user.
+    fn star_song(&self, user_id: i32, song_id: i32) -> Result<(), String>;
+    /// Unstar an artist for a user.
+    fn unstar_artist(&self, user_id: i32, artist_id: i32) -> Result<(), String>;
+    /// Unstar an album for a user.
+    fn unstar_album(&self, user_id: i32, album_id: i32) -> Result<(), String>;
+    /// Unstar a song for a user.
+    fn unstar_song(&self, user_id: i32, song_id: i32) -> Result<(), String>;
+    /// Get all starred artists for a user.
+    fn get_starred_artists(&self, user_id: i32) -> Vec<(Artist, NaiveDateTime)>;
+    /// Get all starred albums for a user.
+    fn get_starred_albums(&self, user_id: i32) -> Vec<(Album, NaiveDateTime)>;
+    /// Get all starred songs for a user.
+    fn get_starred_songs(&self, user_id: i32) -> Vec<(Song, NaiveDateTime)>;
+    /// Get the starred_at timestamp for an artist.
+    fn get_starred_at_for_artist(&self, user_id: i32, artist_id: i32) -> Option<NaiveDateTime>;
+    /// Get the starred_at timestamp for an album.
+    fn get_starred_at_for_album(&self, user_id: i32, album_id: i32) -> Option<NaiveDateTime>;
+    /// Get the starred_at timestamp for a song.
+    fn get_starred_at_for_song(&self, user_id: i32, song_id: i32) -> Option<NaiveDateTime>;
+
+    // Scrobble/now playing methods
+    /// Record a scrobble (song play).
+    fn scrobble(&self, user_id: i32, song_id: i32, time: Option<i64>, submission: bool) -> Result<(), String>;
+    /// Set a song as now playing for a user.
+    fn set_now_playing(&self, user_id: i32, song_id: i32, player_id: Option<&str>) -> Result<(), String>;
+    /// Get all currently playing songs.
+    fn get_now_playing(&self) -> Vec<NowPlayingEntry>;
 }
 
 /// Common query parameters for all Subsonic API requests.
@@ -357,6 +391,9 @@ pub struct DatabaseAuthState {
     artist_repo: ArtistRepository,
     album_repo: AlbumRepository,
     song_repo: SongRepository,
+    starred_repo: StarredRepository,
+    now_playing_repo: NowPlayingRepository,
+    scrobble_repo: ScrobbleRepository,
 }
 
 impl DatabaseAuthState {
@@ -367,7 +404,10 @@ impl DatabaseAuthState {
             music_folder_repo: MusicFolderRepository::new(pool.clone()),
             artist_repo: ArtistRepository::new(pool.clone()),
             album_repo: AlbumRepository::new(pool.clone()),
-            song_repo: SongRepository::new(pool),
+            song_repo: SongRepository::new(pool.clone()),
+            starred_repo: StarredRepository::new(pool.clone()),
+            now_playing_repo: NowPlayingRepository::new(pool.clone()),
+            scrobble_repo: ScrobbleRepository::new(pool),
         }
     }
 
@@ -473,6 +513,66 @@ impl AuthState for DatabaseAuthState {
 
     fn search_songs(&self, query: &str, offset: i64, limit: i64) -> Vec<Song> {
         self.song_repo.search(query, offset, limit).unwrap_or_default()
+    }
+
+    fn star_artist(&self, user_id: i32, artist_id: i32) -> Result<(), String> {
+        self.starred_repo.star_artist(user_id, artist_id).map_err(|e| e.to_string())
+    }
+
+    fn star_album(&self, user_id: i32, album_id: i32) -> Result<(), String> {
+        self.starred_repo.star_album(user_id, album_id).map_err(|e| e.to_string())
+    }
+
+    fn star_song(&self, user_id: i32, song_id: i32) -> Result<(), String> {
+        self.starred_repo.star_song(user_id, song_id).map_err(|e| e.to_string())
+    }
+
+    fn unstar_artist(&self, user_id: i32, artist_id: i32) -> Result<(), String> {
+        self.starred_repo.unstar_artist(user_id, artist_id).map(|_| ()).map_err(|e| e.to_string())
+    }
+
+    fn unstar_album(&self, user_id: i32, album_id: i32) -> Result<(), String> {
+        self.starred_repo.unstar_album(user_id, album_id).map(|_| ()).map_err(|e| e.to_string())
+    }
+
+    fn unstar_song(&self, user_id: i32, song_id: i32) -> Result<(), String> {
+        self.starred_repo.unstar_song(user_id, song_id).map(|_| ()).map_err(|e| e.to_string())
+    }
+
+    fn get_starred_artists(&self, user_id: i32) -> Vec<(Artist, NaiveDateTime)> {
+        self.starred_repo.get_starred_artists(user_id).unwrap_or_default()
+    }
+
+    fn get_starred_albums(&self, user_id: i32) -> Vec<(Album, NaiveDateTime)> {
+        self.starred_repo.get_starred_albums(user_id).unwrap_or_default()
+    }
+
+    fn get_starred_songs(&self, user_id: i32) -> Vec<(Song, NaiveDateTime)> {
+        self.starred_repo.get_starred_songs(user_id).unwrap_or_default()
+    }
+
+    fn get_starred_at_for_artist(&self, user_id: i32, artist_id: i32) -> Option<NaiveDateTime> {
+        self.starred_repo.get_starred_at_for_artist(user_id, artist_id).ok().flatten()
+    }
+
+    fn get_starred_at_for_album(&self, user_id: i32, album_id: i32) -> Option<NaiveDateTime> {
+        self.starred_repo.get_starred_at_for_album(user_id, album_id).ok().flatten()
+    }
+
+    fn get_starred_at_for_song(&self, user_id: i32, song_id: i32) -> Option<NaiveDateTime> {
+        self.starred_repo.get_starred_at_for_song(user_id, song_id).ok().flatten()
+    }
+
+    fn scrobble(&self, user_id: i32, song_id: i32, time: Option<i64>, submission: bool) -> Result<(), String> {
+        self.scrobble_repo.scrobble(user_id, song_id, time, submission).map_err(|e| e.to_string())
+    }
+
+    fn set_now_playing(&self, user_id: i32, song_id: i32, player_id: Option<&str>) -> Result<(), String> {
+        self.now_playing_repo.set_now_playing(user_id, song_id, player_id).map_err(|e| e.to_string())
+    }
+
+    fn get_now_playing(&self) -> Vec<NowPlayingEntry> {
+        self.now_playing_repo.get_all_now_playing().unwrap_or_default()
     }
 }
 

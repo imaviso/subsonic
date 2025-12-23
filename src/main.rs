@@ -144,6 +144,12 @@ fn create_router(state: AppState) -> Router {
         .subsonic_route("/getAlbumList2", handlers::get_album_list2)
         .subsonic_route("/getGenres", handlers::get_genres)
         .subsonic_route("/search3", handlers::search3)
+        // Annotation endpoints
+        .subsonic_route("/star", handlers::star)
+        .subsonic_route("/unstar", handlers::unstar)
+        .subsonic_route("/getStarred2", handlers::get_starred2)
+        .subsonic_route("/scrobble", handlers::scrobble)
+        .subsonic_route("/getNowPlaying", handlers::get_now_playing)
         // Media retrieval endpoints
         .subsonic_route("/stream", handlers::stream)
         .subsonic_route("/download", handlers::download)

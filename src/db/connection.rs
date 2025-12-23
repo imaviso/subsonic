@@ -236,6 +236,117 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result:
     )
     .execute(conn)?;
 
+    // Create starred table for favorites
+    diesel::sql_query(
+        r#"
+        CREATE TABLE IF NOT EXISTS starred (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            artist_id INTEGER REFERENCES artists(id) ON DELETE CASCADE,
+            album_id INTEGER REFERENCES albums(id) ON DELETE CASCADE,
+            song_id INTEGER REFERENCES songs(id) ON DELETE CASCADE,
+            starred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CHECK (
+                (artist_id IS NOT NULL AND album_id IS NULL AND song_id IS NULL) OR
+                (artist_id IS NULL AND album_id IS NOT NULL AND song_id IS NULL) OR
+                (artist_id IS NULL AND album_id IS NULL AND song_id IS NOT NULL)
+            )
+        )
+        "#,
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_starred_user_id ON starred(user_id)"
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_starred_artist_id ON starred(artist_id)"
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_starred_album_id ON starred(album_id)"
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_starred_song_id ON starred(song_id)"
+    )
+    .execute(conn)?;
+
+    // Unique constraint to prevent duplicate stars
+    diesel::sql_query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_starred_user_artist ON starred(user_id, artist_id) WHERE artist_id IS NOT NULL"
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_starred_user_album ON starred(user_id, album_id) WHERE album_id IS NOT NULL"
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_starred_user_song ON starred(user_id, song_id) WHERE song_id IS NOT NULL"
+    )
+    .execute(conn)?;
+
+    // Create now_playing table for currently playing songs
+    diesel::sql_query(
+        r#"
+        CREATE TABLE IF NOT EXISTS now_playing (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            song_id INTEGER NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+            player_id TEXT,
+            started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            minutes_ago INTEGER NOT NULL DEFAULT 0
+        )
+        "#,
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_now_playing_user_id ON now_playing(user_id)"
+    )
+    .execute(conn)?;
+
+    // Only one "now playing" entry per user
+    diesel::sql_query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_now_playing_user ON now_playing(user_id)"
+    )
+    .execute(conn)?;
+
+    // Create scrobbles table for play history
+    diesel::sql_query(
+        r#"
+        CREATE TABLE IF NOT EXISTS scrobbles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            song_id INTEGER NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+            played_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            submission BOOLEAN NOT NULL DEFAULT TRUE
+        )
+        "#,
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_scrobbles_user_id ON scrobbles(user_id)"
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_scrobbles_song_id ON scrobbles(song_id)"
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_scrobbles_played_at ON scrobbles(played_at DESC)"
+    )
+    .execute(conn)?;
+
     Ok(())
 }
 

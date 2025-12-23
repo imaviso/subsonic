@@ -12,7 +12,8 @@ use serde::Serialize;
 use super::error::ApiError;
 use crate::models::music::{
     AlbumList2Response, AlbumWithSongsID3Response, ArtistWithAlbumsID3Response, ArtistsID3Response,
-    ChildResponse, GenresResponse, IndexesResponse, MusicFolderResponse, SearchResult3Response,
+    ChildResponse, GenresResponse, IndexesResponse, MusicFolderResponse, NowPlayingResponse,
+    SearchResult3Response, Starred2Response,
 };
 
 /// The current Subsonic API version we're compatible with.
@@ -540,6 +541,72 @@ mod xml {
             }
         }
     }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct Starred2Response {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "starred2")]
+        pub starred2: super::Starred2Response,
+    }
+
+    impl Starred2Response {
+        pub fn new(starred2: super::Starred2Response) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                starred2,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct NowPlayingResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "nowPlaying")]
+        pub now_playing: super::NowPlayingResponse,
+    }
+
+    impl NowPlayingResponse {
+        pub fn new(now_playing: super::NowPlayingResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                now_playing,
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -582,6 +649,10 @@ mod json {
         pub genres: Option<super::GenresResponse>,
         #[serde(skip_serializing_if = "Option::is_none", rename = "searchResult3")]
         pub search_result3: Option<super::SearchResult3Response>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub starred2: Option<super::Starred2Response>,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "nowPlaying")]
+        pub now_playing: Option<super::NowPlayingResponse>,
     }
 
     #[derive(Debug, Serialize)]
@@ -627,6 +698,8 @@ mod json {
                 album_list2: None,
                 genres: None,
                 search_result3: None,
+                starred2: None,
+                now_playing: None,
             }
         }
 
@@ -649,6 +722,8 @@ mod json {
                 album_list2: None,
                 genres: None,
                 search_result3: None,
+                starred2: None,
+                now_playing: None,
             }
         }
 
@@ -707,6 +782,16 @@ mod json {
             self
         }
 
+        pub fn with_starred2(mut self, starred2: super::Starred2Response) -> Self {
+            self.starred2 = Some(starred2);
+            self
+        }
+
+        pub fn with_now_playing(mut self, now_playing: super::NowPlayingResponse) -> Self {
+            self.now_playing = Some(now_playing);
+            self
+        }
+
         pub fn wrap(self) -> JsonWrapper {
             JsonWrapper {
                 subsonic_response: self,
@@ -739,6 +824,8 @@ enum ResponseKind {
     AlbumList2(AlbumList2Response),
     Genres(GenresResponse),
     SearchResult3(SearchResult3Response),
+    Starred2(Starred2Response),
+    NowPlaying(NowPlayingResponse),
 }
 
 impl SubsonicResponse {
@@ -835,6 +922,20 @@ impl SubsonicResponse {
             kind: ResponseKind::SearchResult3(search_result3),
         }
     }
+
+    pub fn starred2(format: Format, starred2: Starred2Response) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::Starred2(starred2),
+        }
+    }
+
+    pub fn now_playing(format: Format, now_playing: NowPlayingResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::NowPlaying(now_playing),
+        }
+    }
 }
 
 impl IntoResponse for SubsonicResponse {
@@ -890,6 +991,12 @@ impl SubsonicResponse {
             }
             ResponseKind::SearchResult3(search_result3) => {
                 quick_xml::se::to_string(&xml::SearchResult3Response::new(search_result3))
+            }
+            ResponseKind::Starred2(starred2) => {
+                quick_xml::se::to_string(&xml::Starred2Response::new(starred2))
+            }
+            ResponseKind::NowPlaying(now_playing) => {
+                quick_xml::se::to_string(&xml::NowPlayingResponse::new(now_playing))
             }
         };
 
@@ -947,6 +1054,12 @@ impl SubsonicResponse {
             }
             ResponseKind::SearchResult3(search_result3) => {
                 json::SubsonicResponse::ok().with_search_result3(search_result3).wrap()
+            }
+            ResponseKind::Starred2(starred2) => {
+                json::SubsonicResponse::ok().with_starred2(starred2).wrap()
+            }
+            ResponseKind::NowPlaying(now_playing) => {
+                json::SubsonicResponse::ok().with_now_playing(now_playing).wrap()
             }
         };
 
@@ -1075,4 +1188,14 @@ pub fn ok_genres(format: Format, genres: GenresResponse) -> SubsonicResponse {
 /// Helper function to create a search result3 response.
 pub fn ok_search_result3(format: Format, search_result3: SearchResult3Response) -> SubsonicResponse {
     SubsonicResponse::search_result3(format, search_result3)
+}
+
+/// Helper function to create a starred2 response.
+pub fn ok_starred2(format: Format, starred2: Starred2Response) -> SubsonicResponse {
+    SubsonicResponse::starred2(format, starred2)
+}
+
+/// Helper function to create a now playing response.
+pub fn ok_now_playing(format: Format, now_playing: NowPlayingResponse) -> SubsonicResponse {
+    SubsonicResponse::now_playing(format, now_playing)
 }

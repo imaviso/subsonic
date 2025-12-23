@@ -101,11 +101,48 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    starred (id) {
+        id -> Integer,
+        user_id -> Integer,
+        artist_id -> Nullable<Integer>,
+        album_id -> Nullable<Integer>,
+        song_id -> Nullable<Integer>,
+        starred_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    now_playing (id) {
+        id -> Integer,
+        user_id -> Integer,
+        song_id -> Integer,
+        player_id -> Nullable<Text>,
+        started_at -> Timestamp,
+        minutes_ago -> Integer,
+    }
+}
+
+diesel::table! {
+    scrobbles (id) {
+        id -> Integer,
+        user_id -> Integer,
+        song_id -> Integer,
+        played_at -> Timestamp,
+        submission -> Bool,
+    }
+}
+
 // Define foreign key relationships
 diesel::joinable!(albums -> artists (artist_id));
 diesel::joinable!(songs -> albums (album_id));
 diesel::joinable!(songs -> artists (artist_id));
 diesel::joinable!(songs -> music_folders (music_folder_id));
+diesel::joinable!(starred -> users (user_id));
+diesel::joinable!(now_playing -> users (user_id));
+diesel::joinable!(now_playing -> songs (song_id));
+diesel::joinable!(scrobbles -> users (user_id));
+diesel::joinable!(scrobbles -> songs (song_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     users,
@@ -113,4 +150,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     artists,
     albums,
     songs,
+    starred,
+    now_playing,
+    scrobbles,
 );

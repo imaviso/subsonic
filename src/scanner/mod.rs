@@ -387,8 +387,8 @@ impl Scanner {
         // Cache for artists and albums to avoid duplicate lookups
         let mut artist_cache: HashMap<String, i32> = HashMap::new();
         let mut album_cache: HashMap<(String, Option<i32>), i32> = HashMap::new();
-        // Track which albums already have cover art set
-        let mut album_cover_art_cache: HashMap<i32, bool> = HashMap::new();
+        // Cache album cover art hashes (None = no cover art, Some(hash) = has cover art)
+        let mut album_cover_art_cache: HashMap<i32, Option<String>> = HashMap::new();
 
         let mut artists_added = 0;
         let mut albums_added = 0;
@@ -464,8 +464,8 @@ impl Scanner {
                         .map_err(MusicRepoError::Database)?;
 
                     let id = if let Some((id, existing_cover_art)) = existing {
-                        // Track if album already has cover art
-                        album_cover_art_cache.insert(id, existing_cover_art.is_some());
+                        // Store the existing cover art hash (or None if not set)
+                        album_cover_art_cache.insert(id, existing_cover_art);
                         id
                     } else {
                         // Insert new album
@@ -493,7 +493,7 @@ impl Scanner {
                             .map_err(MusicRepoError::Database)?;
                         
                         // New album doesn't have cover art yet
-                        album_cover_art_cache.insert(new_id, false);
+                        album_cover_art_cache.insert(new_id, None);
                         new_id
                     };
 
@@ -509,9 +509,9 @@ impl Scanner {
                 (album_id, &track.cover_art_data, &track.cover_art_mime) 
             {
                 // Check if this album already has cover art
-                let has_cover_art = album_cover_art_cache.get(&album_id).copied().unwrap_or(false);
+                let existing_cover_art = album_cover_art_cache.get(&album_id).cloned().flatten();
                 
-                if !has_cover_art {
+                if existing_cover_art.is_none() {
                     // Save cover art to cache
                     match self.save_cover_art(art_data, art_mime) {
                         Ok(cover_art_hash) => {
@@ -523,7 +523,8 @@ impl Scanner {
                                 eprintln!("  Warning: Failed to update album cover art: {}", e);
                                 None
                             } else {
-                                album_cover_art_cache.insert(album_id, true);
+                                // Update cache with the new hash
+                                album_cover_art_cache.insert(album_id, Some(cover_art_hash.clone()));
                                 cover_art_saved += 1;
                                 Some(cover_art_hash)
                             }
@@ -534,15 +535,16 @@ impl Scanner {
                         }
                     }
                 } else {
-                    None
+                    // Album already has cover art, use existing
+                    existing_cover_art
                 }
             } else {
-                None
+                // No album or no cover art in track, check if album has existing cover art
+                album_id.and_then(|aid| album_cover_art_cache.get(&aid).cloned().flatten())
             };
 
-            // For songs, use the album's cover art hash if we just saved it, or look it up later
-            // We'll use the album's cover_art field when building responses
-            let song_cover_art = album_cover_art_id.clone();
+            // For songs, use the album's cover art hash
+            let song_cover_art = album_cover_art_id;
 
             // Insert or update song
             let path_str = track.path.to_string_lossy().to_string();

@@ -4,7 +4,7 @@ use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use thiserror::Error;
 
-use crate::db::schema::{albums, artists, music_folders, songs, users};
+use crate::db::schema::{albums, artists, music_folders, songs, starred, users};
 use crate::db::DbPool;
 use crate::models::music::{Album, Artist, MusicFolder, NewMusicFolder, Song};
 use crate::models::user::UserRoles;
@@ -1073,5 +1073,544 @@ impl SongRepository {
 
         genres.sort_by(|a, b| a.0.cmp(&b.0));
         Ok(genres)
+    }
+}
+
+// ============================================================================
+// Starred Repository
+// ============================================================================
+
+/// Database row representation for starred items.
+#[derive(Debug, Clone, Queryable, Selectable)]
+#[diesel(table_name = starred)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct StarredRow {
+    pub id: i32,
+    pub user_id: i32,
+    pub artist_id: Option<i32>,
+    pub album_id: Option<i32>,
+    pub song_id: Option<i32>,
+    pub starred_at: NaiveDateTime,
+}
+
+/// Data for inserting a new starred item.
+#[derive(Debug, Clone, Insertable)]
+#[diesel(table_name = starred)]
+pub struct NewStarred {
+    pub user_id: i32,
+    pub artist_id: Option<i32>,
+    pub album_id: Option<i32>,
+    pub song_id: Option<i32>,
+}
+
+/// Repository for starred items database operations.
+#[derive(Clone)]
+pub struct StarredRepository {
+    pool: DbPool,
+}
+
+impl StarredRepository {
+    /// Create a new starred repository.
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+
+    // ========================================================================
+    // Star operations
+    // ========================================================================
+
+    /// Star an artist for a user.
+    pub fn star_artist(&self, user_id: i32, artist_id: i32) -> Result<(), MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        // Check if already starred
+        let existing = starred::table
+            .filter(starred::user_id.eq(user_id))
+            .filter(starred::artist_id.eq(artist_id))
+            .count()
+            .get_result::<i64>(&mut conn)?;
+
+        if existing > 0 {
+            return Ok(()); // Already starred
+        }
+
+        let new_starred = NewStarred {
+            user_id,
+            artist_id: Some(artist_id),
+            album_id: None,
+            song_id: None,
+        };
+
+        diesel::insert_into(starred::table)
+            .values(&new_starred)
+            .execute(&mut conn)?;
+
+        Ok(())
+    }
+
+    /// Star an album for a user.
+    pub fn star_album(&self, user_id: i32, album_id: i32) -> Result<(), MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        // Check if already starred
+        let existing = starred::table
+            .filter(starred::user_id.eq(user_id))
+            .filter(starred::album_id.eq(album_id))
+            .count()
+            .get_result::<i64>(&mut conn)?;
+
+        if existing > 0 {
+            return Ok(()); // Already starred
+        }
+
+        let new_starred = NewStarred {
+            user_id,
+            artist_id: None,
+            album_id: Some(album_id),
+            song_id: None,
+        };
+
+        diesel::insert_into(starred::table)
+            .values(&new_starred)
+            .execute(&mut conn)?;
+
+        Ok(())
+    }
+
+    /// Star a song for a user.
+    pub fn star_song(&self, user_id: i32, song_id: i32) -> Result<(), MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        // Check if already starred
+        let existing = starred::table
+            .filter(starred::user_id.eq(user_id))
+            .filter(starred::song_id.eq(song_id))
+            .count()
+            .get_result::<i64>(&mut conn)?;
+
+        if existing > 0 {
+            return Ok(()); // Already starred
+        }
+
+        let new_starred = NewStarred {
+            user_id,
+            artist_id: None,
+            album_id: None,
+            song_id: Some(song_id),
+        };
+
+        diesel::insert_into(starred::table)
+            .values(&new_starred)
+            .execute(&mut conn)?;
+
+        Ok(())
+    }
+
+    // ========================================================================
+    // Unstar operations
+    // ========================================================================
+
+    /// Unstar an artist for a user.
+    pub fn unstar_artist(&self, user_id: i32, artist_id: i32) -> Result<bool, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let deleted = diesel::delete(
+            starred::table
+                .filter(starred::user_id.eq(user_id))
+                .filter(starred::artist_id.eq(artist_id)),
+        )
+        .execute(&mut conn)?;
+
+        Ok(deleted > 0)
+    }
+
+    /// Unstar an album for a user.
+    pub fn unstar_album(&self, user_id: i32, album_id: i32) -> Result<bool, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let deleted = diesel::delete(
+            starred::table
+                .filter(starred::user_id.eq(user_id))
+                .filter(starred::album_id.eq(album_id)),
+        )
+        .execute(&mut conn)?;
+
+        Ok(deleted > 0)
+    }
+
+    /// Unstar a song for a user.
+    pub fn unstar_song(&self, user_id: i32, song_id: i32) -> Result<bool, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let deleted = diesel::delete(
+            starred::table
+                .filter(starred::user_id.eq(user_id))
+                .filter(starred::song_id.eq(song_id)),
+        )
+        .execute(&mut conn)?;
+
+        Ok(deleted > 0)
+    }
+
+    // ========================================================================
+    // Query operations
+    // ========================================================================
+
+    /// Get all starred artists for a user with their starred timestamp.
+    /// Returns (Artist, starred_at).
+    pub fn get_starred_artists(&self, user_id: i32) -> Result<Vec<(Artist, NaiveDateTime)>, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let results: Vec<(StarredRow, ArtistRow)> = starred::table
+            .inner_join(artists::table.on(starred::artist_id.eq(artists::id.nullable())))
+            .filter(starred::user_id.eq(user_id))
+            .filter(starred::artist_id.is_not_null())
+            .select((StarredRow::as_select(), ArtistRow::as_select()))
+            .order(starred::starred_at.desc())
+            .load(&mut conn)?;
+
+        Ok(results
+            .into_iter()
+            .map(|(s, a)| (Artist::from(a), s.starred_at))
+            .collect())
+    }
+
+    /// Get all starred albums for a user with their starred timestamp.
+    /// Returns (Album, starred_at).
+    pub fn get_starred_albums(&self, user_id: i32) -> Result<Vec<(Album, NaiveDateTime)>, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let results: Vec<(StarredRow, AlbumRow)> = starred::table
+            .inner_join(albums::table.on(starred::album_id.eq(albums::id.nullable())))
+            .filter(starred::user_id.eq(user_id))
+            .filter(starred::album_id.is_not_null())
+            .select((StarredRow::as_select(), AlbumRow::as_select()))
+            .order(starred::starred_at.desc())
+            .load(&mut conn)?;
+
+        Ok(results
+            .into_iter()
+            .map(|(s, a)| (Album::from(a), s.starred_at))
+            .collect())
+    }
+
+    /// Get all starred songs for a user with their starred timestamp.
+    /// Returns (Song, starred_at).
+    pub fn get_starred_songs(&self, user_id: i32) -> Result<Vec<(Song, NaiveDateTime)>, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let results: Vec<(StarredRow, SongRow)> = starred::table
+            .inner_join(songs::table.on(starred::song_id.eq(songs::id.nullable())))
+            .filter(starred::user_id.eq(user_id))
+            .filter(starred::song_id.is_not_null())
+            .select((StarredRow::as_select(), SongRow::as_select()))
+            .order(starred::starred_at.desc())
+            .load(&mut conn)?;
+
+        Ok(results
+            .into_iter()
+            .map(|(s, song)| (Song::from(song), s.starred_at))
+            .collect())
+    }
+
+    /// Check if an artist is starred by a user.
+    pub fn is_artist_starred(&self, user_id: i32, artist_id: i32) -> Result<bool, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let count = starred::table
+            .filter(starred::user_id.eq(user_id))
+            .filter(starred::artist_id.eq(artist_id))
+            .count()
+            .get_result::<i64>(&mut conn)?;
+
+        Ok(count > 0)
+    }
+
+    /// Check if an album is starred by a user.
+    pub fn is_album_starred(&self, user_id: i32, album_id: i32) -> Result<bool, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let count = starred::table
+            .filter(starred::user_id.eq(user_id))
+            .filter(starred::album_id.eq(album_id))
+            .count()
+            .get_result::<i64>(&mut conn)?;
+
+        Ok(count > 0)
+    }
+
+    /// Check if a song is starred by a user.
+    pub fn is_song_starred(&self, user_id: i32, song_id: i32) -> Result<bool, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let count = starred::table
+            .filter(starred::user_id.eq(user_id))
+            .filter(starred::song_id.eq(song_id))
+            .count()
+            .get_result::<i64>(&mut conn)?;
+
+        Ok(count > 0)
+    }
+
+    /// Get the starred_at timestamp for an artist.
+    pub fn get_starred_at_for_artist(&self, user_id: i32, artist_id: i32) -> Result<Option<NaiveDateTime>, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let result = starred::table
+            .filter(starred::user_id.eq(user_id))
+            .filter(starred::artist_id.eq(artist_id))
+            .select(starred::starred_at)
+            .first(&mut conn)
+            .optional()?;
+
+        Ok(result)
+    }
+
+    /// Get the starred_at timestamp for an album.
+    pub fn get_starred_at_for_album(&self, user_id: i32, album_id: i32) -> Result<Option<NaiveDateTime>, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let result = starred::table
+            .filter(starred::user_id.eq(user_id))
+            .filter(starred::album_id.eq(album_id))
+            .select(starred::starred_at)
+            .first(&mut conn)
+            .optional()?;
+
+        Ok(result)
+    }
+
+    /// Get the starred_at timestamp for a song.
+    pub fn get_starred_at_for_song(&self, user_id: i32, song_id: i32) -> Result<Option<NaiveDateTime>, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let result = starred::table
+            .filter(starred::user_id.eq(user_id))
+            .filter(starred::song_id.eq(song_id))
+            .select(starred::starred_at)
+            .first(&mut conn)
+            .optional()?;
+
+        Ok(result)
+    }
+}
+
+// ============================================================================
+// Now Playing Repository
+// ============================================================================
+
+use crate::db::schema::now_playing;
+
+/// Database row representation for now playing.
+#[derive(Debug, Clone, Queryable, Selectable)]
+#[diesel(table_name = now_playing)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct NowPlayingRow {
+    pub id: i32,
+    pub user_id: i32,
+    pub song_id: i32,
+    pub player_id: Option<String>,
+    pub started_at: NaiveDateTime,
+    pub minutes_ago: i32,
+}
+
+/// Data for inserting a now playing entry.
+#[derive(Debug, Clone, Insertable)]
+#[diesel(table_name = now_playing)]
+pub struct NewNowPlaying {
+    pub user_id: i32,
+    pub song_id: i32,
+    pub player_id: Option<String>,
+}
+
+/// Now playing entry with song and user info.
+#[derive(Debug, Clone)]
+pub struct NowPlayingEntry {
+    pub song: Song,
+    pub username: String,
+    pub player_id: Option<String>,
+    pub minutes_ago: i32,
+}
+
+/// Repository for now playing database operations.
+#[derive(Clone)]
+pub struct NowPlayingRepository {
+    pool: DbPool,
+}
+
+impl NowPlayingRepository {
+    /// Create a new now playing repository.
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+
+    /// Set a song as now playing for a user.
+    /// Replaces any existing now playing entry for the user.
+    pub fn set_now_playing(&self, user_id: i32, song_id: i32, player_id: Option<&str>) -> Result<(), MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        // Delete any existing entry for this user
+        diesel::delete(now_playing::table.filter(now_playing::user_id.eq(user_id)))
+            .execute(&mut conn)?;
+
+        // Insert new entry
+        let new_entry = NewNowPlaying {
+            user_id,
+            song_id,
+            player_id: player_id.map(|s| s.to_string()),
+        };
+
+        diesel::insert_into(now_playing::table)
+            .values(&new_entry)
+            .execute(&mut conn)?;
+
+        Ok(())
+    }
+
+    /// Clear the now playing entry for a user.
+    pub fn clear_now_playing(&self, user_id: i32) -> Result<(), MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        diesel::delete(now_playing::table.filter(now_playing::user_id.eq(user_id)))
+            .execute(&mut conn)?;
+
+        Ok(())
+    }
+
+    /// Get all currently playing songs.
+    /// Returns entries with song and user info, ordered by most recent.
+    pub fn get_all_now_playing(&self) -> Result<Vec<NowPlayingEntry>, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let results: Vec<(NowPlayingRow, SongRow, UserRow)> = now_playing::table
+            .inner_join(songs::table.on(now_playing::song_id.eq(songs::id)))
+            .inner_join(users::table.on(now_playing::user_id.eq(users::id)))
+            .select((NowPlayingRow::as_select(), SongRow::as_select(), UserRow::as_select()))
+            .order(now_playing::started_at.desc())
+            .load(&mut conn)?;
+
+        let now = chrono::Utc::now().naive_utc();
+        
+        Ok(results
+            .into_iter()
+            .map(|(np, song, user)| {
+                let minutes_ago = (now - np.started_at).num_minutes() as i32;
+                NowPlayingEntry {
+                    song: Song::from(song),
+                    username: user.username,
+                    player_id: np.player_id,
+                    minutes_ago,
+                }
+            })
+            .collect())
+    }
+}
+
+// ============================================================================
+// Scrobble Repository
+// ============================================================================
+
+use crate::db::schema::scrobbles;
+
+/// Database row representation for scrobbles.
+#[derive(Debug, Clone, Queryable, Selectable)]
+#[diesel(table_name = scrobbles)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct ScrobbleRow {
+    pub id: i32,
+    pub user_id: i32,
+    pub song_id: i32,
+    pub played_at: NaiveDateTime,
+    pub submission: bool,
+}
+
+/// Data for inserting a scrobble.
+#[derive(Debug, Clone, Insertable)]
+#[diesel(table_name = scrobbles)]
+pub struct NewScrobble {
+    pub user_id: i32,
+    pub song_id: i32,
+    pub played_at: NaiveDateTime,
+    pub submission: bool,
+}
+
+/// Repository for scrobble database operations.
+#[derive(Clone)]
+pub struct ScrobbleRepository {
+    pool: DbPool,
+}
+
+impl ScrobbleRepository {
+    /// Create a new scrobble repository.
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+
+    /// Record a scrobble (song play).
+    pub fn scrobble(&self, user_id: i32, song_id: i32, time: Option<i64>, submission: bool) -> Result<(), MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        // Determine the played_at timestamp
+        let played_at = if let Some(timestamp_ms) = time {
+            // Convert milliseconds since epoch to NaiveDateTime
+            chrono::DateTime::from_timestamp_millis(timestamp_ms)
+                .map(|dt| dt.naive_utc())
+                .unwrap_or_else(|| chrono::Utc::now().naive_utc())
+        } else {
+            chrono::Utc::now().naive_utc()
+        };
+
+        let new_scrobble = NewScrobble {
+            user_id,
+            song_id,
+            played_at,
+            submission,
+        };
+
+        diesel::insert_into(scrobbles::table)
+            .values(&new_scrobble)
+            .execute(&mut conn)?;
+
+        // If this is a submission (full play), increment the song's play count
+        if submission {
+            diesel::update(songs::table.filter(songs::id.eq(song_id)))
+                .set(songs::play_count.eq(songs::play_count + 1))
+                .execute(&mut conn)?;
+
+            // Also try to increment the album's play count
+            let album_id: Option<i32> = songs::table
+                .filter(songs::id.eq(song_id))
+                .select(songs::album_id)
+                .first(&mut conn)
+                .optional()?
+                .flatten();
+
+            if let Some(aid) = album_id {
+                diesel::update(albums::table.filter(albums::id.eq(aid)))
+                    .set(albums::play_count.eq(albums::play_count + 1))
+                    .execute(&mut conn)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get recent scrobbles for a user.
+    pub fn get_recent_scrobbles(&self, user_id: i32, limit: i64) -> Result<Vec<(Song, NaiveDateTime)>, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let results: Vec<(ScrobbleRow, SongRow)> = scrobbles::table
+            .inner_join(songs::table.on(scrobbles::song_id.eq(songs::id)))
+            .filter(scrobbles::user_id.eq(user_id))
+            .filter(scrobbles::submission.eq(true))
+            .select((ScrobbleRow::as_select(), SongRow::as_select()))
+            .order(scrobbles::played_at.desc())
+            .limit(limit)
+            .load(&mut conn)?;
+
+        Ok(results
+            .into_iter()
+            .map(|(scrobble, song)| (Song::from(song), scrobble.played_at))
+            .collect())
     }
 }

@@ -8,15 +8,16 @@ use serde::Deserialize;
 use crate::api::auth::SubsonicAuth;
 use crate::api::error::ApiError;
 use crate::api::response::{
-    error_response, ok_album, ok_album_list2, ok_artist, ok_artists, ok_genres,
-    ok_indexes, ok_music_folders, ok_random_songs, ok_search_result3, ok_song,
-    ok_songs_by_genre,
+    error_response, ok_album, ok_album_info, ok_album_list2, ok_artist, ok_artist_info2,
+    ok_artists, ok_genres, ok_indexes, ok_music_folders, ok_random_songs, ok_search_result3,
+    ok_similar_songs2, ok_song, ok_songs_by_genre, ok_top_songs,
 };
 use crate::models::music::{
-    AlbumID3Response, AlbumList2Response, AlbumWithSongsID3Response, ArtistID3Response,
-    ArtistResponse, ArtistWithAlbumsID3Response, ArtistsID3Response, ChildResponse,
-    GenreResponse, GenresResponse, IndexID3Response, IndexResponse, IndexesResponse,
-    MusicFolderResponse, RandomSongsResponse, SearchResult3Response, SongsByGenreResponse,
+    AlbumID3Response, AlbumInfoResponse, AlbumList2Response, AlbumWithSongsID3Response,
+    ArtistID3Response, ArtistInfo2Response, ArtistResponse, ArtistWithAlbumsID3Response,
+    ArtistsID3Response, ChildResponse, GenreResponse, GenresResponse, IndexID3Response,
+    IndexResponse, IndexesResponse, MusicFolderResponse, RandomSongsResponse,
+    SearchResult3Response, SimilarSongs2Response, SongsByGenreResponse, TopSongsResponse,
 };
 
 /// Query parameters for endpoints that require an ID.
@@ -575,4 +576,209 @@ pub async fn get_songs_by_genre(
     };
 
     ok_songs_by_genre(auth.format, response).into_response()
+}
+
+// ============================================================================
+// Artist Info, Album Info, Similar Songs, and Top Songs endpoints
+// ============================================================================
+
+/// Query parameters for getArtistInfo2.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct ArtistInfo2Params {
+    /// The artist ID.
+    pub id: Option<String>,
+    /// Max number of similar artists to return.
+    pub count: Option<i32>,
+    /// Whether to include artists that are not present in the media library.
+    #[serde(rename = "includeNotPresent")]
+    pub include_not_present: Option<bool>,
+}
+
+/// GET/POST /rest/getArtistInfo2[.view]
+///
+/// Returns artist info with biography, image URLs, similar artists, etc.
+/// This is a stub implementation that returns minimal data from the database.
+pub async fn get_artist_info2(
+    axum::extract::Query(params): axum::extract::Query<ArtistInfo2Params>,
+    auth: SubsonicAuth,
+) -> impl IntoResponse {
+    // Get the required 'id' parameter
+    let artist_id = match params.id.as_ref().and_then(|id| id.parse::<i32>().ok()) {
+        Some(id) => id,
+        None => {
+            return error_response(auth.format, &ApiError::MissingParameter("id".into()))
+                .into_response()
+        }
+    };
+
+    // Get the artist
+    let artist = match auth.state.get_artist(artist_id) {
+        Some(artist) => artist,
+        None => {
+            return error_response(auth.format, &ApiError::NotFound("Artist".into()))
+                .into_response()
+        }
+    };
+
+    // Create response with available data from the artist
+    let response = ArtistInfo2Response::from_artist(&artist);
+    ok_artist_info2(auth.format, response).into_response()
+}
+
+/// Query parameters for getAlbumInfo2.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct AlbumInfo2Params {
+    /// The album ID.
+    pub id: Option<String>,
+}
+
+/// GET/POST /rest/getAlbumInfo2[.view]
+///
+/// Returns album info with notes, MusicBrainz ID, image URLs, etc.
+/// This is a stub implementation that returns minimal data from the database.
+pub async fn get_album_info2(
+    axum::extract::Query(params): axum::extract::Query<AlbumInfo2Params>,
+    auth: SubsonicAuth,
+) -> impl IntoResponse {
+    // Get the required 'id' parameter
+    let album_id = match params.id.as_ref().and_then(|id| id.parse::<i32>().ok()) {
+        Some(id) => id,
+        None => {
+            return error_response(auth.format, &ApiError::MissingParameter("id".into()))
+                .into_response()
+        }
+    };
+
+    // Get the album
+    let album = match auth.state.get_album(album_id) {
+        Some(album) => album,
+        None => {
+            return error_response(auth.format, &ApiError::NotFound("Album".into()))
+                .into_response()
+        }
+    };
+
+    // Create response with available data from the album
+    let response = AlbumInfoResponse::from_album(&album);
+    ok_album_info(auth.format, response).into_response()
+}
+
+/// Query parameters for getSimilarSongs2.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct SimilarSongs2Params {
+    /// The song/album/artist ID.
+    pub id: Option<String>,
+    /// Max number of similar songs to return. Default 50.
+    pub count: Option<i64>,
+}
+
+/// GET/POST /rest/getSimilarSongs2[.view]
+///
+/// Returns songs similar to the given song, album, or artist.
+/// Since we don't have external metadata, we return random songs from the same artist or genre.
+pub async fn get_similar_songs2(
+    axum::extract::Query(params): axum::extract::Query<SimilarSongs2Params>,
+    auth: SubsonicAuth,
+) -> impl IntoResponse {
+    // Get the required 'id' parameter
+    let id = match params.id.as_ref().and_then(|id| id.parse::<i32>().ok()) {
+        Some(id) => id,
+        None => {
+            return error_response(auth.format, &ApiError::MissingParameter("id".into()))
+                .into_response()
+        }
+    };
+
+    let count = params.count.unwrap_or(50).min(500).max(1);
+    let user_id = auth.user.id;
+
+    // Try to get similar songs - first check if it's a song
+    let songs = if let Some(song) = auth.state.get_song(id) {
+        // Get songs from the same artist (excluding this song)
+        if let Some(artist_id) = song.artist_id {
+            auth.state.get_similar_songs_by_artist(artist_id, id, count)
+        } else if let Some(ref genre) = song.genre {
+            // Fall back to same genre
+            auth.state.get_songs_by_genre(genre, count, 0, None)
+        } else {
+            Vec::new()
+        }
+    } else if let Some(album) = auth.state.get_album(id) {
+        // Get songs from the same artist
+        if let Some(artist_id) = album.artist_id {
+            auth.state.get_similar_songs_by_artist(artist_id, -1, count)
+        } else {
+            Vec::new()
+        }
+    } else if auth.state.get_artist(id).is_some() {
+        // Get random songs from this artist
+        auth.state.get_similar_songs_by_artist(id, -1, count)
+    } else {
+        return error_response(auth.format, &ApiError::NotFound("Item".into()))
+            .into_response();
+    };
+
+    let song_responses: Vec<ChildResponse> = songs
+        .iter()
+        .map(|s| {
+            let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
+            ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+        })
+        .collect();
+
+    let response = SimilarSongs2Response {
+        songs: song_responses,
+    };
+
+    ok_similar_songs2(auth.format, response).into_response()
+}
+
+/// Query parameters for getTopSongs.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct TopSongsParams {
+    /// The artist name.
+    pub artist: Option<String>,
+    /// Max number of songs to return. Default 50.
+    pub count: Option<i64>,
+}
+
+/// GET/POST /rest/getTopSongs[.view]
+///
+/// Returns the top songs for a given artist, ordered by play count.
+pub async fn get_top_songs(
+    axum::extract::Query(params): axum::extract::Query<TopSongsParams>,
+    auth: SubsonicAuth,
+) -> impl IntoResponse {
+    // Get the required 'artist' parameter
+    let artist_name = match params.artist.as_ref() {
+        Some(name) if !name.is_empty() => name,
+        _ => {
+            return error_response(auth.format, &ApiError::MissingParameter("artist".into()))
+                .into_response()
+        }
+    };
+
+    let count = params.count.unwrap_or(50).min(500).max(1);
+    let user_id = auth.user.id;
+
+    // Get top songs by artist name (ordered by play count)
+    let songs = auth.state.get_top_songs_by_artist_name(artist_name, count);
+
+    let song_responses: Vec<ChildResponse> = songs
+        .iter()
+        .map(|s| {
+            let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
+            ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+        })
+        .collect();
+
+    let response = TopSongsResponse {
+        songs: song_responses,
+    };
+
+    ok_top_songs(auth.format, response).into_response()
 }

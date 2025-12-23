@@ -153,6 +153,12 @@ pub trait AuthState: Send + Sync + 'static {
         music_folder_id: Option<i32>,
     ) -> Vec<Song>;
 
+    /// Get similar songs by artist (random songs from the same artist, excluding a specific song).
+    fn get_similar_songs_by_artist(&self, artist_id: i32, exclude_song_id: i32, limit: i64) -> Vec<Song>;
+
+    /// Get top songs by artist name (ordered by play count).
+    fn get_top_songs_by_artist_name(&self, artist_name: &str, limit: i64) -> Vec<Song>;
+
     // Rating methods
     /// Set rating for a song (0 to remove, 1-5 to rate).
     fn set_song_rating(&self, user_id: i32, song_id: i32, rating: i32) -> Result<(), String>;
@@ -968,6 +974,14 @@ impl AuthState for DatabaseAuthState {
 
     fn get_scan_state(&self) -> Arc<ScanState> {
         self.scan_state.clone()
+    }
+
+    fn get_similar_songs_by_artist(&self, artist_id: i32, exclude_song_id: i32, limit: i64) -> Vec<Song> {
+        self.song_repo.find_random_by_artist(artist_id, exclude_song_id, limit).unwrap_or_default()
+    }
+
+    fn get_top_songs_by_artist_name(&self, artist_name: &str, limit: i64) -> Vec<Song> {
+        self.song_repo.find_top_by_artist_name(artist_name, limit).unwrap_or_default()
     }
 }
 

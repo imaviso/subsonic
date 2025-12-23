@@ -1034,3 +1034,142 @@ pub struct PlayQueueResponse {
     #[serde(rename = "entry", skip_serializing_if = "Vec::is_empty")]
     pub entries: Vec<ChildResponse>,
 }
+
+// ============================================================================
+// Response types for getArtistInfo2, getAlbumInfo2, getSimilarSongs2, getTopSongs
+// ============================================================================
+
+/// Artist info response for getArtistInfo2.
+#[derive(Debug, Serialize, Clone)]
+pub struct ArtistInfo2Response {
+    #[serde(rename = "@biography", skip_serializing_if = "Option::is_none")]
+    pub biography: Option<String>,
+    #[serde(rename = "@musicBrainzId", skip_serializing_if = "Option::is_none")]
+    pub musicbrainz_id: Option<String>,
+    #[serde(rename = "@lastFmUrl", skip_serializing_if = "Option::is_none")]
+    pub last_fm_url: Option<String>,
+    #[serde(rename = "@smallImageUrl", skip_serializing_if = "Option::is_none")]
+    pub small_image_url: Option<String>,
+    #[serde(rename = "@mediumImageUrl", skip_serializing_if = "Option::is_none")]
+    pub medium_image_url: Option<String>,
+    #[serde(rename = "@largeImageUrl", skip_serializing_if = "Option::is_none")]
+    pub large_image_url: Option<String>,
+    #[serde(rename = "similarArtist", skip_serializing_if = "Vec::is_empty")]
+    pub similar_artists: Vec<ArtistID3Response>,
+}
+
+impl ArtistInfo2Response {
+    /// Create an empty artist info response (stub).
+    pub fn empty() -> Self {
+        Self {
+            biography: None,
+            musicbrainz_id: None,
+            last_fm_url: None,
+            small_image_url: None,
+            medium_image_url: None,
+            large_image_url: None,
+            similar_artists: Vec::new(),
+        }
+    }
+
+    /// Create an artist info response with musicbrainz_id from the artist.
+    pub fn from_artist(artist: &Artist) -> Self {
+        Self {
+            biography: None,
+            musicbrainz_id: artist.musicbrainz_id.clone(),
+            last_fm_url: None,
+            small_image_url: artist.artist_image_url.clone(),
+            medium_image_url: artist.artist_image_url.clone(),
+            large_image_url: artist.artist_image_url.clone(),
+            similar_artists: Vec::new(),
+        }
+    }
+}
+
+/// Album info response for getAlbumInfo2.
+#[derive(Debug, Serialize, Clone)]
+pub struct AlbumInfoResponse {
+    #[serde(rename = "@notes", skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    #[serde(rename = "@musicBrainzId", skip_serializing_if = "Option::is_none")]
+    pub musicbrainz_id: Option<String>,
+    #[serde(rename = "@lastFmUrl", skip_serializing_if = "Option::is_none")]
+    pub last_fm_url: Option<String>,
+    #[serde(rename = "@smallImageUrl", skip_serializing_if = "Option::is_none")]
+    pub small_image_url: Option<String>,
+    #[serde(rename = "@mediumImageUrl", skip_serializing_if = "Option::is_none")]
+    pub medium_image_url: Option<String>,
+    #[serde(rename = "@largeImageUrl", skip_serializing_if = "Option::is_none")]
+    pub large_image_url: Option<String>,
+}
+
+impl AlbumInfoResponse {
+    /// Create an empty album info response (stub).
+    pub fn empty() -> Self {
+        Self {
+            notes: None,
+            musicbrainz_id: None,
+            last_fm_url: None,
+            small_image_url: None,
+            medium_image_url: None,
+            large_image_url: None,
+        }
+    }
+
+    /// Create an album info response with data from the album.
+    pub fn from_album(album: &Album) -> Self {
+        Self {
+            notes: None,
+            musicbrainz_id: album.musicbrainz_id.clone(),
+            last_fm_url: None,
+            small_image_url: None,
+            medium_image_url: None,
+            large_image_url: None,
+        }
+    }
+}
+
+/// Similar songs response for getSimilarSongs2.
+#[derive(Debug, Serialize, Clone)]
+pub struct SimilarSongs2Response {
+    #[serde(rename = "song", skip_serializing_if = "Vec::is_empty")]
+    pub songs: Vec<ChildResponse>,
+}
+
+/// Top songs response for getTopSongs.
+#[derive(Debug, Serialize, Clone)]
+pub struct TopSongsResponse {
+    #[serde(rename = "song", skip_serializing_if = "Vec::is_empty")]
+    pub songs: Vec<ChildResponse>,
+}
+
+/// Lyrics response for getLyricsBySongId and getLyrics.
+#[derive(Debug, Serialize, Clone)]
+pub struct LyricsResponse {
+    #[serde(rename = "@artist", skip_serializing_if = "Option::is_none")]
+    pub artist: Option<String>,
+    #[serde(rename = "@title", skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(rename = "$text", skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+}
+
+impl LyricsResponse {
+    /// Create an empty lyrics response.
+    pub fn empty() -> Self {
+        Self {
+            artist: None,
+            title: None,
+            value: None,
+        }
+    }
+
+    /// Create a lyrics response with data.
+    pub fn new(artist: Option<String>, title: Option<String>, lyrics: Option<String>) -> Self {
+        Self {
+            artist,
+            title,
+            value: lyrics,
+        }
+    }
+}

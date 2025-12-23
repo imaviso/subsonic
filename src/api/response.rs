@@ -11,10 +11,12 @@ use serde::Serialize;
 
 use super::error::ApiError;
 use crate::models::music::{
-    AlbumList2Response, AlbumWithSongsID3Response, ArtistWithAlbumsID3Response, ArtistsID3Response,
-    ChildResponse, GenresResponse, IndexesResponse, MusicFolderResponse, NowPlayingResponse,
-    PlaylistWithSongsResponse, PlaylistsResponse, PlayQueueResponse,
-    RandomSongsResponse, SearchResult3Response, SongsByGenreResponse, Starred2Response,
+    AlbumInfoResponse, AlbumList2Response, AlbumWithSongsID3Response, ArtistID3Response,
+    ArtistInfo2Response, ArtistWithAlbumsID3Response, ArtistsID3Response, ChildResponse,
+    GenresResponse, IndexesResponse, LyricsResponse, MusicFolderResponse, NowPlayingResponse,
+    PlaylistWithSongsResponse, PlaylistsResponse, PlayQueueResponse, RandomSongsResponse,
+    SearchResult3Response, SimilarSongs2Response, SongsByGenreResponse, Starred2Response,
+    TopSongsResponse,
 };
 use crate::models::user::{UserResponse, UsersResponse};
 
@@ -920,6 +922,171 @@ mod xml {
             }
         }
     }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct ArtistInfo2Response {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "artistInfo2")]
+        pub artist_info2: super::ArtistInfo2Response,
+    }
+
+    impl ArtistInfo2Response {
+        pub fn new(artist_info2: super::ArtistInfo2Response) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                artist_info2,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct AlbumInfoResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "albumInfo")]
+        pub album_info: super::AlbumInfoResponse,
+    }
+
+    impl AlbumInfoResponse {
+        pub fn new(album_info: super::AlbumInfoResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                album_info,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct SimilarSongs2Response {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "similarSongs2")]
+        pub similar_songs2: super::SimilarSongs2Response,
+    }
+
+    impl SimilarSongs2Response {
+        pub fn new(similar_songs2: super::SimilarSongs2Response) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                similar_songs2,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct TopSongsResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "topSongs")]
+        pub top_songs: super::TopSongsResponse,
+    }
+
+    impl TopSongsResponse {
+        pub fn new(top_songs: super::TopSongsResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                top_songs,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct LyricsResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "lyrics")]
+        pub lyrics: super::LyricsResponse,
+    }
+
+    impl LyricsResponse {
+        pub fn new(lyrics: super::LyricsResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                lyrics,
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -984,6 +1151,16 @@ mod json {
         pub scan_status: Option<ScanStatusJson>,
         #[serde(skip_serializing_if = "Option::is_none")]
         pub bookmarks: Option<BookmarksJson>,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "artistInfo2")]
+        pub artist_info2: Option<super::ArtistInfo2Response>,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "albumInfo")]
+        pub album_info: Option<super::AlbumInfoResponse>,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "similarSongs2")]
+        pub similar_songs2: Option<super::SimilarSongs2Response>,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "topSongs")]
+        pub top_songs: Option<super::TopSongsResponse>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub lyrics: Option<super::LyricsResponse>,
     }
 
     #[derive(Debug, Serialize)]
@@ -1052,6 +1229,11 @@ mod json {
                 users: None,
                 scan_status: None,
                 bookmarks: None,
+                artist_info2: None,
+                album_info: None,
+                similar_songs2: None,
+                top_songs: None,
+                lyrics: None,
             }
         }
 
@@ -1085,6 +1267,11 @@ mod json {
                 users: None,
                 scan_status: None,
                 bookmarks: None,
+                artist_info2: None,
+                album_info: None,
+                similar_songs2: None,
+                top_songs: None,
+                lyrics: None,
             }
         }
 
@@ -1198,6 +1385,31 @@ mod json {
             self
         }
 
+        pub fn with_artist_info2(mut self, artist_info2: super::ArtistInfo2Response) -> Self {
+            self.artist_info2 = Some(artist_info2);
+            self
+        }
+
+        pub fn with_album_info(mut self, album_info: super::AlbumInfoResponse) -> Self {
+            self.album_info = Some(album_info);
+            self
+        }
+
+        pub fn with_similar_songs2(mut self, similar_songs2: super::SimilarSongs2Response) -> Self {
+            self.similar_songs2 = Some(similar_songs2);
+            self
+        }
+
+        pub fn with_top_songs(mut self, top_songs: super::TopSongsResponse) -> Self {
+            self.top_songs = Some(top_songs);
+            self
+        }
+
+        pub fn with_lyrics(mut self, lyrics: super::LyricsResponse) -> Self {
+            self.lyrics = Some(lyrics);
+            self
+        }
+
         pub fn wrap(self) -> JsonWrapper {
             JsonWrapper {
                 subsonic_response: self,
@@ -1241,6 +1453,11 @@ enum ResponseKind {
     Users(UsersResponse),
     ScanStatus { scanning: bool, count: u64 },
     Bookmarks,
+    ArtistInfo2(ArtistInfo2Response),
+    AlbumInfo(AlbumInfoResponse),
+    SimilarSongs2(SimilarSongs2Response),
+    TopSongs(TopSongsResponse),
+    Lyrics(LyricsResponse),
 }
 
 impl SubsonicResponse {
@@ -1414,6 +1631,41 @@ impl SubsonicResponse {
             kind: ResponseKind::Bookmarks,
         }
     }
+
+    pub fn artist_info2(format: Format, artist_info2: ArtistInfo2Response) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::ArtistInfo2(artist_info2),
+        }
+    }
+
+    pub fn album_info(format: Format, album_info: AlbumInfoResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::AlbumInfo(album_info),
+        }
+    }
+
+    pub fn similar_songs2(format: Format, similar_songs2: SimilarSongs2Response) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::SimilarSongs2(similar_songs2),
+        }
+    }
+
+    pub fn top_songs(format: Format, top_songs: TopSongsResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::TopSongs(top_songs),
+        }
+    }
+
+    pub fn lyrics(format: Format, lyrics: LyricsResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::Lyrics(lyrics),
+        }
+    }
 }
 
 impl IntoResponse for SubsonicResponse {
@@ -1502,6 +1754,21 @@ impl SubsonicResponse {
             }
             ResponseKind::Bookmarks => {
                 quick_xml::se::to_string(&xml::BookmarksResponse::new())
+            }
+            ResponseKind::ArtistInfo2(artist_info2) => {
+                quick_xml::se::to_string(&xml::ArtistInfo2Response::new(artist_info2))
+            }
+            ResponseKind::AlbumInfo(album_info) => {
+                quick_xml::se::to_string(&xml::AlbumInfoResponse::new(album_info))
+            }
+            ResponseKind::SimilarSongs2(similar_songs2) => {
+                quick_xml::se::to_string(&xml::SimilarSongs2Response::new(similar_songs2))
+            }
+            ResponseKind::TopSongs(top_songs) => {
+                quick_xml::se::to_string(&xml::TopSongsResponse::new(top_songs))
+            }
+            ResponseKind::Lyrics(lyrics) => {
+                quick_xml::se::to_string(&xml::LyricsResponse::new(lyrics))
             }
         };
 
@@ -1592,6 +1859,21 @@ impl SubsonicResponse {
             }
             ResponseKind::Bookmarks => {
                 json::SubsonicResponse::ok().with_bookmarks().wrap()
+            }
+            ResponseKind::ArtistInfo2(artist_info2) => {
+                json::SubsonicResponse::ok().with_artist_info2(artist_info2).wrap()
+            }
+            ResponseKind::AlbumInfo(album_info) => {
+                json::SubsonicResponse::ok().with_album_info(album_info).wrap()
+            }
+            ResponseKind::SimilarSongs2(similar_songs2) => {
+                json::SubsonicResponse::ok().with_similar_songs2(similar_songs2).wrap()
+            }
+            ResponseKind::TopSongs(top_songs) => {
+                json::SubsonicResponse::ok().with_top_songs(top_songs).wrap()
+            }
+            ResponseKind::Lyrics(lyrics) => {
+                json::SubsonicResponse::ok().with_lyrics(lyrics).wrap()
             }
         };
 
@@ -1775,4 +2057,29 @@ pub fn ok_scan_status(format: Format, scanning: bool, count: u64) -> SubsonicRes
 /// Helper function to create an empty bookmarks response.
 pub fn ok_bookmarks(format: Format) -> SubsonicResponse {
     SubsonicResponse::bookmarks(format)
+}
+
+/// Helper function to create an artist info2 response.
+pub fn ok_artist_info2(format: Format, artist_info2: ArtistInfo2Response) -> SubsonicResponse {
+    SubsonicResponse::artist_info2(format, artist_info2)
+}
+
+/// Helper function to create an album info response.
+pub fn ok_album_info(format: Format, album_info: AlbumInfoResponse) -> SubsonicResponse {
+    SubsonicResponse::album_info(format, album_info)
+}
+
+/// Helper function to create a similar songs2 response.
+pub fn ok_similar_songs2(format: Format, similar_songs2: SimilarSongs2Response) -> SubsonicResponse {
+    SubsonicResponse::similar_songs2(format, similar_songs2)
+}
+
+/// Helper function to create a top songs response.
+pub fn ok_top_songs(format: Format, top_songs: TopSongsResponse) -> SubsonicResponse {
+    SubsonicResponse::top_songs(format, top_songs)
+}
+
+/// Helper function to create a lyrics response.
+pub fn ok_lyrics(format: Format, lyrics: LyricsResponse) -> SubsonicResponse {
+    SubsonicResponse::lyrics(format, lyrics)
 }

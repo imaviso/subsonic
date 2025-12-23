@@ -1233,6 +1233,46 @@ impl SongRepository {
 
         Ok(results.into_iter().map(Song::from).collect())
     }
+
+    /// Find random songs by artist, excluding a specific song.
+    /// Used for getSimilarSongs2 endpoint.
+    pub fn find_random_by_artist(
+        &self,
+        artist_id: i32,
+        exclude_song_id: i32,
+        limit: i64,
+    ) -> Result<Vec<Song>, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let results = songs::table
+            .filter(songs::artist_id.eq(artist_id))
+            .filter(songs::id.ne(exclude_song_id))
+            .select(SongRow::as_select())
+            .order(diesel::dsl::sql::<diesel::sql_types::Integer>("RANDOM()"))
+            .limit(limit)
+            .load(&mut conn)?;
+
+        Ok(results.into_iter().map(Song::from).collect())
+    }
+
+    /// Find top songs by artist name, ordered by play count.
+    /// Used for getTopSongs endpoint.
+    pub fn find_top_by_artist_name(
+        &self,
+        artist_name: &str,
+        limit: i64,
+    ) -> Result<Vec<Song>, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let results = songs::table
+            .filter(songs::artist_name.eq(artist_name))
+            .select(SongRow::as_select())
+            .order(songs::play_count.desc())
+            .limit(limit)
+            .load(&mut conn)?;
+
+        Ok(results.into_iter().map(Song::from).collect())
+    }
 }
 
 // ============================================================================

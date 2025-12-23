@@ -148,6 +148,10 @@ fn create_router(state: AppState) -> Router {
         .subsonic_route("/search3", handlers::search3)
         .subsonic_route("/getRandomSongs", handlers::get_random_songs)
         .subsonic_route("/getSongsByGenre", handlers::get_songs_by_genre)
+        .subsonic_route("/getArtistInfo2", handlers::get_artist_info2)
+        .subsonic_route("/getAlbumInfo2", handlers::get_album_info2)
+        .subsonic_route("/getSimilarSongs2", handlers::get_similar_songs2)
+        .subsonic_route("/getTopSongs", handlers::get_top_songs)
         // Annotation endpoints
         .subsonic_route("/star", handlers::star)
         .subsonic_route("/unstar", handlers::unstar)

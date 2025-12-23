@@ -329,9 +329,11 @@ pub async fn get_album_list2(
             };
             auth.state.get_albums_by_genre(genre, offset, size)
         }
-        "starred" | "highest" => {
-            // Not implemented yet, return empty
-            vec![]
+        "starred" => {
+            auth.state.get_albums_starred(auth.user.id, offset, size)
+        }
+        "highest" => {
+            auth.state.get_albums_highest(auth.user.id, offset, size)
         }
         _ => {
             return error_response(

@@ -9,5 +9,5 @@ pub use repository::{
     AlbumRepository, ArtistRepository, MusicFolderRepository, MusicRepoError,
     NewUser, NowPlayingEntry, NowPlayingRepository, Playlist, PlaylistRepository,
     PlayQueue, PlayQueueRepository, RatingRepository, ScrobbleRepository,
-    SongRepository, StarredRepository, UserRepoError, UserRepository,
+    SongRepository, StarredRepository, UserRepoError, UserRepository, UserUpdate,
 };

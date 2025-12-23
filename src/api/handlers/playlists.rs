@@ -52,17 +52,26 @@ pub async fn get_playlists(
 
     let playlist_responses: Vec<PlaylistResponse> = playlists
         .iter()
-        .map(|p| PlaylistResponse {
-            id: p.id.to_string(),
-            name: p.name.clone(),
-            comment: p.comment.clone(),
-            owner: p.owner.clone(),
-            public: p.public,
-            song_count: p.song_count,
-            duration: p.duration,
-            created: p.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
-            changed: p.updated_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
-            cover_art: None,  // TODO: derive from first song in playlist
+        .map(|p| {
+            // Derive cover art from first song in playlist
+            let cover_art = if p.song_count > 0 {
+                let songs = auth.state.get_playlist_songs(p.id);
+                songs.first().and_then(|s| s.cover_art.clone())
+            } else {
+                None
+            };
+            PlaylistResponse {
+                id: p.id.to_string(),
+                name: p.name.clone(),
+                comment: p.comment.clone(),
+                owner: p.owner.clone(),
+                public: p.public,
+                song_count: p.song_count,
+                duration: p.duration,
+                created: p.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+                changed: p.updated_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+                cover_art,
+            }
         })
         .collect();
 
@@ -117,6 +126,9 @@ pub async fn get_playlist(
         })
         .collect();
 
+    // Derive cover art from first song
+    let cover_art = songs.first().and_then(|s| s.cover_art.clone());
+
     let response = PlaylistWithSongsResponse {
         id: playlist.id.to_string(),
         name: playlist.name.clone(),
@@ -127,7 +139,7 @@ pub async fn get_playlist(
         duration: playlist.duration,
         created: playlist.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
         changed: playlist.updated_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
-        cover_art: None,  // TODO: derive from first song in playlist
+        cover_art,
         entries: song_responses,
     };
 
@@ -214,6 +226,9 @@ pub async fn create_playlist(
                 })
                 .collect();
 
+            // Derive cover art from first song
+            let cover_art = songs.first().and_then(|s| s.cover_art.clone());
+
             let response = PlaylistWithSongsResponse {
                 id: playlist.id.to_string(),
                 name: playlist.name.clone(),
@@ -224,7 +239,7 @@ pub async fn create_playlist(
                 duration: playlist.duration,
                 created: playlist.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
                 changed: playlist.updated_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
-                cover_art: None,  // TODO: derive from first song in playlist
+                cover_art,
                 entries: song_responses,
             };
 
@@ -252,6 +267,9 @@ pub async fn create_playlist(
                 })
                 .collect();
 
+            // Derive cover art from first song
+            let cover_art = songs.first().and_then(|s| s.cover_art.clone());
+
             let response = PlaylistWithSongsResponse {
                 id: playlist.id.to_string(),
                 name: playlist.name.clone(),
@@ -262,7 +280,7 @@ pub async fn create_playlist(
                 duration: playlist.duration,
                 created: playlist.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
                 changed: playlist.updated_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
-                cover_art: None,  // TODO: derive from first song in playlist
+                cover_art,
                 entries: song_responses,
             };
 

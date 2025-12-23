@@ -308,6 +308,72 @@ impl UserRepository {
     pub fn revoke_api_key(&self, user_id: i32) -> Result<bool, UserRepoError> {
         self.set_api_key(user_id, None)
     }
+
+    /// Update a user's subsonic password (used for token auth).
+    pub fn update_subsonic_password(&self, user_id: i32, subsonic_password: &str) -> Result<bool, UserRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let updated = diesel::update(users::table.filter(users::id.eq(user_id)))
+            .set(users::subsonic_password.eq(Some(subsonic_password)))
+            .execute(&mut conn)?;
+
+        Ok(updated > 0)
+    }
+
+    /// Update a user's profile and roles.
+    pub fn update_user(&self, update: &UserUpdate) -> Result<bool, UserRepoError> {
+        let mut conn = self.pool.get()?;
+
+        // Find the user first
+        let user = users::table
+            .filter(users::username.eq(&update.username))
+            .select(UserRow::as_select())
+            .first(&mut conn)
+            .optional()?
+            .ok_or_else(|| UserRepoError::NotFound(update.username.clone()))?;
+
+        // Build the update - we update all provided fields
+        let updated = diesel::update(users::table.filter(users::id.eq(user.id)))
+            .set((
+                update.email.as_ref().map(|e| users::email.eq(Some(e.as_str()))),
+                update.admin_role.map(|v| users::admin_role.eq(v)),
+                update.settings_role.map(|v| users::settings_role.eq(v)),
+                update.stream_role.map(|v| users::stream_role.eq(v)),
+                update.jukebox_role.map(|v| users::jukebox_role.eq(v)),
+                update.download_role.map(|v| users::download_role.eq(v)),
+                update.upload_role.map(|v| users::upload_role.eq(v)),
+                update.playlist_role.map(|v| users::playlist_role.eq(v)),
+                update.cover_art_role.map(|v| users::cover_art_role.eq(v)),
+                update.comment_role.map(|v| users::comment_role.eq(v)),
+                update.podcast_role.map(|v| users::podcast_role.eq(v)),
+                update.share_role.map(|v| users::share_role.eq(v)),
+                update.video_conversion_role.map(|v| users::video_conversion_role.eq(v)),
+                update.max_bit_rate.map(|v| users::max_bit_rate.eq(v)),
+            ))
+            .execute(&mut conn)?;
+
+        Ok(updated > 0)
+    }
+}
+
+/// Data for updating an existing user.
+#[derive(Debug, Clone, Default)]
+pub struct UserUpdate {
+    pub username: String,
+    pub email: Option<String>,
+    pub admin_role: Option<bool>,
+    pub settings_role: Option<bool>,
+    pub stream_role: Option<bool>,
+    pub jukebox_role: Option<bool>,
+    pub download_role: Option<bool>,
+    pub upload_role: Option<bool>,
+    pub playlist_role: Option<bool>,
+    pub cover_art_role: Option<bool>,
+    pub comment_role: Option<bool>,
+    pub podcast_role: Option<bool>,
+    pub share_role: Option<bool>,
+    pub video_conversion_role: Option<bool>,
+    pub max_bit_rate: Option<i32>,
 }
 
 // ============================================================================
@@ -864,6 +930,18 @@ impl AlbumRepository {
             .order(albums::name.asc())
             .offset(offset)
             .limit(limit)
+            .load(&mut conn)?;
+
+        Ok(results.into_iter().map(Album::from).collect())
+    }
+
+    /// Find albums by IDs.
+    pub fn find_by_ids(&self, album_ids: &[i32]) -> Result<Vec<Album>, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let results = albums::table
+            .filter(albums::id.eq_any(album_ids))
+            .select(AlbumRow::as_select())
             .load(&mut conn)?;
 
         Ok(results.into_iter().map(Album::from).collect())
@@ -1474,6 +1552,27 @@ impl StarredRepository {
 
         Ok(result)
     }
+
+    /// Get starred albums for a user with pagination, ordered by starred_at descending.
+    /// Returns albums with their starred_at timestamp.
+    pub fn get_starred_albums_paginated(&self, user_id: i32, offset: i64, limit: i64) -> Result<Vec<(Album, NaiveDateTime)>, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let results: Vec<(StarredRow, AlbumRow)> = starred::table
+            .inner_join(albums::table.on(starred::album_id.eq(albums::id.nullable())))
+            .filter(starred::user_id.eq(user_id))
+            .filter(starred::album_id.is_not_null())
+            .select((StarredRow::as_select(), AlbumRow::as_select()))
+            .order(starred::starred_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .load(&mut conn)?;
+
+        Ok(results
+            .into_iter()
+            .map(|(s, a)| (Album::from(a), s.starred_at))
+            .collect())
+    }
 }
 
 // ============================================================================
@@ -1911,6 +2010,27 @@ impl RatingRepository {
             .optional()?;
 
         Ok(result)
+    }
+
+    /// Get highest rated albums for a user with pagination.
+    /// Returns album IDs ordered by rating descending, then by album name.
+    pub fn get_highest_rated_album_ids(&self, user_id: i32, offset: i64, limit: i64) -> Result<Vec<i32>, MusicRepoError> {
+        let mut conn = self.pool.get()?;
+
+        let results: Vec<i32> = user_ratings::table
+            .filter(user_ratings::user_id.eq(user_id))
+            .filter(user_ratings::album_id.is_not_null())
+            .filter(user_ratings::rating.gt(0))
+            .select(user_ratings::album_id)
+            .order(user_ratings::rating.desc())
+            .offset(offset)
+            .limit(limit)
+            .load::<Option<i32>>(&mut conn)?
+            .into_iter()
+            .flatten()
+            .collect();
+
+        Ok(results)
     }
 }
 

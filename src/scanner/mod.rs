@@ -5,6 +5,8 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
 
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::tag::{Accessor, ItemKey};
@@ -72,6 +74,65 @@ pub struct ScanResult {
     pub artists_added: usize,
     pub albums_added: usize,
     pub cover_art_saved: usize,
+}
+
+/// Shared state for tracking scan progress across API requests.
+/// 
+/// This is designed to be shared across threads (wrapped in Arc) and
+/// provides atomic operations for checking and updating scan status.
+#[derive(Debug, Default)]
+pub struct ScanState {
+    /// Whether a scan is currently in progress.
+    scanning: AtomicBool,
+    /// Number of items scanned so far.
+    count: AtomicU64,
+}
+
+impl ScanState {
+    /// Create a new scan state.
+    pub fn new() -> Self {
+        Self {
+            scanning: AtomicBool::new(false),
+            count: AtomicU64::new(0),
+        }
+    }
+
+    /// Check if a scan is currently in progress.
+    pub fn is_scanning(&self) -> bool {
+        self.scanning.load(Ordering::SeqCst)
+    }
+
+    /// Get the current item count.
+    pub fn get_count(&self) -> u64 {
+        self.count.load(Ordering::SeqCst)
+    }
+
+    /// Try to start a scan. Returns false if a scan is already in progress.
+    pub fn try_start(&self) -> bool {
+        self.scanning
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+    }
+
+    /// Mark the scan as complete.
+    pub fn finish(&self) {
+        self.scanning.store(false, Ordering::SeqCst);
+    }
+
+    /// Reset the count to 0.
+    pub fn reset_count(&self) {
+        self.count.store(0, Ordering::SeqCst);
+    }
+
+    /// Increment the count by 1 and return the new value.
+    pub fn increment_count(&self) -> u64 {
+        self.count.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    /// Set the count to a specific value.
+    pub fn set_count(&self, value: u64) {
+        self.count.store(value, Ordering::SeqCst);
+    }
 }
 
 /// Default cover art cache directory.
@@ -144,6 +205,13 @@ impl Scanner {
 
     /// Scan all enabled music folders.
     pub fn scan_all(&self) -> Result<ScanResult, ScanError> {
+        self.scan_all_with_state(None)
+    }
+
+    /// Scan all enabled music folders with optional progress tracking.
+    /// 
+    /// If a ScanState is provided, the count will be updated as tracks are processed.
+    pub fn scan_all_with_state(&self, state: Option<Arc<ScanState>>) -> Result<ScanResult, ScanError> {
         let folder_repo = MusicFolderRepository::new(self.pool.clone());
         let folders = folder_repo.find_enabled()?;
 
@@ -155,7 +223,7 @@ impl Scanner {
 
         for folder in folders {
             println!("Scanning folder: {} ({})", folder.name, folder.path);
-            match self.scan_folder(&folder) {
+            match self.scan_folder_with_state(&folder, state.clone()) {
                 Ok(result) => {
                     total_result.tracks_found += result.tracks_found;
                     total_result.tracks_added += result.tracks_added;
@@ -182,11 +250,16 @@ impl Scanner {
             .ok_or_else(|| ScanError::FolderNotFound(folder_id.to_string()))?;
 
         println!("Scanning folder: {} ({})", folder.name, folder.path);
-        self.scan_folder(&folder)
+        self.scan_folder_with_state(&folder, None)
     }
 
     /// Scan a single music folder.
     fn scan_folder(&self, folder: &MusicFolder) -> Result<ScanResult, ScanError> {
+        self.scan_folder_with_state(folder, None)
+    }
+
+    /// Scan a single music folder with optional progress tracking.
+    fn scan_folder_with_state(&self, folder: &MusicFolder, state: Option<Arc<ScanState>>) -> Result<ScanResult, ScanError> {
         let mut result = ScanResult::default();
         let folder_path = Path::new(&folder.path);
 
@@ -202,7 +275,7 @@ impl Scanner {
 
         // Process tracks and populate database
         let (artists_added, albums_added, tracks_added, tracks_failed, cover_art_saved) =
-            self.process_tracks(folder, tracks)?;
+            self.process_tracks_with_state(folder, tracks, state)?;
 
         result.artists_added = artists_added;
         result.albums_added = albums_added;
@@ -375,6 +448,16 @@ impl Scanner {
         &self,
         folder: &MusicFolder,
         tracks: Vec<ScannedTrack>,
+    ) -> Result<(usize, usize, usize, usize, usize), ScanError> {
+        self.process_tracks_with_state(folder, tracks, None)
+    }
+
+    /// Process scanned tracks and populate the database with optional progress tracking.
+    fn process_tracks_with_state(
+        &self,
+        folder: &MusicFolder,
+        tracks: Vec<ScannedTrack>,
+        state: Option<Arc<ScanState>>,
     ) -> Result<(usize, usize, usize, usize, usize), ScanError> {
         use crate::db::schema::{albums, artists, songs};
         use diesel::prelude::*;
@@ -615,6 +698,11 @@ impl Scanner {
                     eprintln!("  Failed to insert {}: {}", path_str, e);
                     tracks_failed += 1;
                 }
+            }
+
+            // Update scan progress if state tracking is enabled
+            if let Some(ref state) = state {
+                state.increment_count();
             }
         }
 

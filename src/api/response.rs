@@ -16,6 +16,7 @@ use crate::models::music::{
     PlaylistWithSongsResponse, PlaylistsResponse, PlayQueueResponse,
     RandomSongsResponse, SearchResult3Response, SongsByGenreResponse, Starred2Response,
 };
+use crate::models::user::{UserResponse, UsersResponse};
 
 /// The current Subsonic API version we're compatible with.
 pub const API_VERSION: &str = "1.16.1";
@@ -773,6 +774,113 @@ mod xml {
             }
         }
     }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct UserResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "user")]
+        pub user: super::UserResponse,
+    }
+
+    impl UserResponse {
+        pub fn new(user: super::UserResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                user,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct UsersResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "users")]
+        pub users: super::UsersResponse,
+    }
+
+    impl UsersResponse {
+        pub fn new(users: super::UsersResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                users,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    pub struct ScanStatus {
+        #[serde(rename = "@scanning")]
+        pub scanning: bool,
+        #[serde(rename = "@count")]
+        pub count: u64,
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct ScanStatusResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "scanStatus")]
+        pub scan_status: ScanStatus,
+    }
+
+    impl ScanStatusResponse {
+        pub fn new(scanning: bool, count: u64) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                scan_status: ScanStatus { scanning, count },
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -829,6 +937,18 @@ mod json {
         pub playlist: Option<super::PlaylistWithSongsResponse>,
         #[serde(skip_serializing_if = "Option::is_none", rename = "playQueue")]
         pub play_queue: Option<super::PlayQueueResponse>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub user: Option<super::UserResponse>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub users: Option<super::UsersResponse>,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "scanStatus")]
+        pub scan_status: Option<ScanStatusJson>,
+    }
+
+    #[derive(Debug, Serialize)]
+    pub struct ScanStatusJson {
+        pub scanning: bool,
+        pub count: u64,
     }
 
     #[derive(Debug, Serialize)]
@@ -881,6 +1001,9 @@ mod json {
                 playlists: None,
                 playlist: None,
                 play_queue: None,
+                user: None,
+                users: None,
+                scan_status: None,
             }
         }
 
@@ -910,6 +1033,9 @@ mod json {
                 playlists: None,
                 playlist: None,
                 play_queue: None,
+                user: None,
+                users: None,
+                scan_status: None,
             }
         }
 
@@ -1003,6 +1129,21 @@ mod json {
             self
         }
 
+        pub fn with_user(mut self, user: super::UserResponse) -> Self {
+            self.user = Some(user);
+            self
+        }
+
+        pub fn with_users(mut self, users: super::UsersResponse) -> Self {
+            self.users = Some(users);
+            self
+        }
+
+        pub fn with_scan_status(mut self, scanning: bool, count: u64) -> Self {
+            self.scan_status = Some(ScanStatusJson { scanning, count });
+            self
+        }
+
         pub fn wrap(self) -> JsonWrapper {
             JsonWrapper {
                 subsonic_response: self,
@@ -1042,6 +1183,9 @@ enum ResponseKind {
     Playlists(PlaylistsResponse),
     Playlist(PlaylistWithSongsResponse),
     PlayQueue(PlayQueueResponse),
+    User(UserResponse),
+    Users(UsersResponse),
+    ScanStatus { scanning: bool, count: u64 },
 }
 
 impl SubsonicResponse {
@@ -1187,6 +1331,27 @@ impl SubsonicResponse {
             kind: ResponseKind::PlayQueue(play_queue),
         }
     }
+
+    pub fn user(format: Format, user: UserResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::User(user),
+        }
+    }
+
+    pub fn users(format: Format, users: UsersResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::Users(users),
+        }
+    }
+
+    pub fn scan_status(format: Format, scanning: bool, count: u64) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::ScanStatus { scanning, count },
+        }
+    }
 }
 
 impl IntoResponse for SubsonicResponse {
@@ -1263,6 +1428,15 @@ impl SubsonicResponse {
             }
             ResponseKind::PlayQueue(play_queue) => {
                 quick_xml::se::to_string(&xml::PlayQueueResponse::new(play_queue))
+            }
+            ResponseKind::User(user) => {
+                quick_xml::se::to_string(&xml::UserResponse::new(user))
+            }
+            ResponseKind::Users(users) => {
+                quick_xml::se::to_string(&xml::UsersResponse::new(users))
+            }
+            ResponseKind::ScanStatus { scanning, count } => {
+                quick_xml::se::to_string(&xml::ScanStatusResponse::new(scanning, count))
             }
         };
 
@@ -1341,6 +1515,15 @@ impl SubsonicResponse {
             }
             ResponseKind::PlayQueue(play_queue) => {
                 json::SubsonicResponse::ok().with_play_queue(play_queue).wrap()
+            }
+            ResponseKind::User(user) => {
+                json::SubsonicResponse::ok().with_user(user).wrap()
+            }
+            ResponseKind::Users(users) => {
+                json::SubsonicResponse::ok().with_users(users).wrap()
+            }
+            ResponseKind::ScanStatus { scanning, count } => {
+                json::SubsonicResponse::ok().with_scan_status(scanning, count).wrap()
             }
         };
 
@@ -1504,4 +1687,19 @@ pub fn ok_playlist(format: Format, playlist: PlaylistWithSongsResponse) -> Subso
 /// Helper function to create a play queue response.
 pub fn ok_play_queue(format: Format, play_queue: PlayQueueResponse) -> SubsonicResponse {
     SubsonicResponse::play_queue(format, play_queue)
+}
+
+/// Helper function to create a user response.
+pub fn ok_user(format: Format, user: UserResponse) -> SubsonicResponse {
+    SubsonicResponse::user(format, user)
+}
+
+/// Helper function to create a users response.
+pub fn ok_users(format: Format, users: UsersResponse) -> SubsonicResponse {
+    SubsonicResponse::users(format, users)
+}
+
+/// Helper function to create a scan status response.
+pub fn ok_scan_status(format: Format, scanning: bool, count: u64) -> SubsonicResponse {
+    SubsonicResponse::scan_status(format, scanning, count)
 }

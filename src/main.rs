@@ -165,7 +165,17 @@ fn create_router(state: AppState) -> Router {
         // Media retrieval endpoints
         .subsonic_route("/stream", handlers::stream)
         .subsonic_route("/download", handlers::download)
-        .subsonic_route("/getCoverArt", handlers::get_cover_art);
+        .subsonic_route("/getCoverArt", handlers::get_cover_art)
+        // User management endpoints
+        .subsonic_route("/getUser", handlers::get_user)
+        .subsonic_route("/getUsers", handlers::get_users)
+        .subsonic_route("/deleteUser", handlers::delete_user)
+        .subsonic_route("/changePassword", handlers::change_password)
+        .subsonic_route("/createUser", handlers::create_user)
+        .subsonic_route("/updateUser", handlers::update_user)
+        // Scanning endpoints
+        .subsonic_route("/startScan", handlers::start_scan)
+        .subsonic_route("/getScanStatus", handlers::get_scan_status);
 
     Router::new()
         .nest("/rest", rest_routes)

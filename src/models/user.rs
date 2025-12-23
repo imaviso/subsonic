@@ -77,12 +77,14 @@ impl User {
 }
 
 /// Subsonic API user response format.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct UserResponse {
     #[serde(rename = "@username")]
     pub username: String,
     #[serde(rename = "@email", skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
+    #[serde(rename = "@scrobblingEnabled")]
+    pub scrobbling_enabled: bool,
     #[serde(rename = "@adminRole")]
     pub admin_role: bool,
     #[serde(rename = "@settingsRole")]
@@ -116,6 +118,7 @@ impl From<&User> for UserResponse {
         Self {
             username: user.username.clone(),
             email: user.email.clone(),
+            scrobbling_enabled: true, // We always enable scrobbling
             admin_role: user.roles.admin_role,
             settings_role: user.roles.settings_role,
             stream_role: user.roles.stream_role,
@@ -131,4 +134,11 @@ impl From<&User> for UserResponse {
             max_bit_rate: user.max_bit_rate,
         }
     }
+}
+
+/// Subsonic API users response format for getUsers.
+#[derive(Debug, Serialize, Clone)]
+pub struct UsersResponse {
+    #[serde(rename = "user", skip_serializing_if = "Vec::is_empty")]
+    pub users: Vec<UserResponse>,
 }

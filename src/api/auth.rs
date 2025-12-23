@@ -34,9 +34,11 @@ use serde::Deserialize;
 
 use super::error::ApiError;
 use super::response::{error_response, Format};
-use crate::db::{DbPool, UserRepository, MusicFolderRepository, ArtistRepository, SongRepository, AlbumRepository, StarredRepository, NowPlayingRepository, ScrobbleRepository, NowPlayingEntry, RatingRepository, PlaylistRepository, PlayQueueRepository, Playlist, PlayQueue};
+use crate::crypto::hash_password;
+use crate::db::{DbPool, UserRepository, MusicFolderRepository, ArtistRepository, SongRepository, AlbumRepository, StarredRepository, NowPlayingRepository, ScrobbleRepository, NowPlayingEntry, RatingRepository, PlaylistRepository, PlayQueueRepository, Playlist, PlayQueue, NewUser, UserUpdate};
 use crate::models::User;
 use crate::models::music::{MusicFolder, Artist, Song, Album};
+use crate::scanner::ScanState;
 use chrono::NaiveDateTime;
 
 /// Application state that must be available for auth.
@@ -81,6 +83,10 @@ pub trait AuthState: Send + Sync + 'static {
     fn get_albums_by_year(&self, from_year: i32, to_year: i32, offset: i64, limit: i64) -> Vec<Album>;
     /// Get albums by genre.
     fn get_albums_by_genre(&self, genre: &str, offset: i64, limit: i64) -> Vec<Album>;
+    /// Get starred albums for a user with pagination.
+    fn get_albums_starred(&self, user_id: i32, offset: i64, limit: i64) -> Vec<Album>;
+    /// Get highest rated albums for a user with pagination.
+    fn get_albums_highest(&self, user_id: i32, offset: i64, limit: i64) -> Vec<Album>;
 
     // Genre methods for getGenres
     /// Get all genres with song and album counts.
@@ -195,6 +201,61 @@ pub trait AuthState: Send + Sync + 'static {
         position: Option<i64>,
         changed_by: Option<&str>,
     ) -> Result<(), String>;
+
+    // User management methods
+    /// Get a user by username.
+    fn get_user(&self, username: &str) -> Option<User>;
+    /// Get all users.
+    fn get_all_users(&self) -> Vec<User>;
+    /// Delete a user by username.
+    fn delete_user(&self, username: &str) -> Result<bool, String>;
+    /// Change a user's password.
+    fn change_password(&self, username: &str, new_password: &str) -> Result<(), String>;
+    /// Create a new user.
+    fn create_user(
+        &self,
+        username: &str,
+        password: &str,
+        email: &str,
+        admin_role: bool,
+        settings_role: bool,
+        stream_role: bool,
+        jukebox_role: bool,
+        download_role: bool,
+        upload_role: bool,
+        playlist_role: bool,
+        cover_art_role: bool,
+        comment_role: bool,
+        podcast_role: bool,
+        share_role: bool,
+        video_conversion_role: bool,
+    ) -> Result<User, String>;
+    /// Update an existing user.
+    fn update_user(
+        &self,
+        username: &str,
+        password: Option<&str>,
+        email: Option<&str>,
+        admin_role: Option<bool>,
+        settings_role: Option<bool>,
+        stream_role: Option<bool>,
+        jukebox_role: Option<bool>,
+        download_role: Option<bool>,
+        upload_role: Option<bool>,
+        playlist_role: Option<bool>,
+        cover_art_role: Option<bool>,
+        comment_role: Option<bool>,
+        podcast_role: Option<bool>,
+        share_role: Option<bool>,
+        video_conversion_role: Option<bool>,
+        max_bit_rate: Option<i32>,
+    ) -> Result<(), String>;
+
+    // Scanning methods
+    /// Get the database pool for scanning operations.
+    fn get_db_pool(&self) -> DbPool;
+    /// Get the scan state for checking/updating scan progress.
+    fn get_scan_state(&self) -> Arc<ScanState>;
 }
 
 /// Common query parameters for all Subsonic API requests.
@@ -454,6 +515,7 @@ where
 /// Uses the user repository to look up users from SQLite.
 #[derive(Clone)]
 pub struct DatabaseAuthState {
+    pool: DbPool,
     user_repo: UserRepository,
     music_folder_repo: MusicFolderRepository,
     artist_repo: ArtistRepository,
@@ -465,12 +527,14 @@ pub struct DatabaseAuthState {
     rating_repo: RatingRepository,
     playlist_repo: PlaylistRepository,
     play_queue_repo: PlayQueueRepository,
+    scan_state: Arc<ScanState>,
 }
 
 impl DatabaseAuthState {
     /// Create a new database auth state.
     pub fn new(pool: DbPool) -> Self {
         Self {
+            pool: pool.clone(),
             user_repo: UserRepository::new(pool.clone()),
             music_folder_repo: MusicFolderRepository::new(pool.clone()),
             artist_repo: ArtistRepository::new(pool.clone()),
@@ -482,6 +546,7 @@ impl DatabaseAuthState {
             rating_repo: RatingRepository::new(pool.clone()),
             playlist_repo: PlaylistRepository::new(pool.clone()),
             play_queue_repo: PlayQueueRepository::new(pool),
+            scan_state: Arc::new(ScanState::new()),
         }
     }
 
@@ -571,6 +636,38 @@ impl AuthState for DatabaseAuthState {
 
     fn get_albums_by_genre(&self, genre: &str, offset: i64, limit: i64) -> Vec<Album> {
         self.album_repo.find_by_genre(genre, offset, limit).unwrap_or_default()
+    }
+
+    fn get_albums_starred(&self, user_id: i32, offset: i64, limit: i64) -> Vec<Album> {
+        self.starred_repo
+            .get_starred_albums_paginated(user_id, offset, limit)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(album, _)| album)
+            .collect()
+    }
+
+    fn get_albums_highest(&self, user_id: i32, offset: i64, limit: i64) -> Vec<Album> {
+        // Get highest rated album IDs
+        let album_ids = self.rating_repo
+            .get_highest_rated_album_ids(user_id, offset, limit)
+            .unwrap_or_default();
+        
+        if album_ids.is_empty() {
+            return vec![];
+        }
+        
+        // Fetch albums and maintain order
+        let albums = self.album_repo.find_by_ids(&album_ids).unwrap_or_default();
+        
+        // Re-order albums to match the rating order
+        let mut album_map: std::collections::HashMap<i32, Album> = 
+            albums.into_iter().map(|a| (a.id, a)).collect();
+        
+        album_ids
+            .into_iter()
+            .filter_map(|id| album_map.remove(&id))
+            .collect()
     }
 
     fn get_genres(&self) -> Vec<(String, i64, i64)> {
@@ -739,6 +836,138 @@ impl AuthState for DatabaseAuthState {
         changed_by: Option<&str>,
     ) -> Result<(), String> {
         self.play_queue_repo.save_play_queue(user_id, song_ids, current_song_id, position, changed_by).map_err(|e| e.to_string())
+    }
+
+    fn get_user(&self, username: &str) -> Option<User> {
+        self.user_repo.find_by_username(username).ok().flatten()
+    }
+
+    fn get_all_users(&self) -> Vec<User> {
+        self.user_repo.find_all().unwrap_or_default()
+    }
+
+    fn delete_user(&self, username: &str) -> Result<bool, String> {
+        let user = self.user_repo.find_by_username(username)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| format!("User '{}' not found", username))?;
+        self.user_repo.delete(user.id).map_err(|e| e.to_string())
+    }
+
+    fn change_password(&self, username: &str, new_password: &str) -> Result<(), String> {
+        let user = self.user_repo.find_by_username(username)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| format!("User '{}' not found", username))?;
+        
+        let password_hash = hash_password(new_password)
+            .map_err(|e| e.to_string())?;
+        
+        self.user_repo.update_password(user.id, &password_hash)
+            .map_err(|e| e.to_string())?;
+        
+        // Also update the subsonic_password for token auth compatibility
+        self.user_repo.update_subsonic_password(user.id, new_password)
+            .map_err(|e| e.to_string())?;
+        
+        Ok(())
+    }
+
+    fn create_user(
+        &self,
+        username: &str,
+        password: &str,
+        email: &str,
+        admin_role: bool,
+        settings_role: bool,
+        stream_role: bool,
+        jukebox_role: bool,
+        download_role: bool,
+        upload_role: bool,
+        playlist_role: bool,
+        cover_art_role: bool,
+        comment_role: bool,
+        podcast_role: bool,
+        share_role: bool,
+        video_conversion_role: bool,
+    ) -> Result<User, String> {
+        let password_hash = hash_password(password)
+            .map_err(|e| e.to_string())?;
+
+        let new_user = NewUser {
+            username,
+            password_hash: &password_hash,
+            subsonic_password: Some(password),
+            email: Some(email),
+            admin_role,
+            settings_role,
+            stream_role,
+            jukebox_role,
+            download_role,
+            upload_role,
+            playlist_role,
+            cover_art_role,
+            comment_role,
+            podcast_role,
+            share_role,
+            video_conversion_role,
+            max_bit_rate: 0,
+        };
+
+        self.user_repo.create(&new_user).map_err(|e| e.to_string())
+    }
+
+    fn update_user(
+        &self,
+        username: &str,
+        password: Option<&str>,
+        email: Option<&str>,
+        admin_role: Option<bool>,
+        settings_role: Option<bool>,
+        stream_role: Option<bool>,
+        jukebox_role: Option<bool>,
+        download_role: Option<bool>,
+        upload_role: Option<bool>,
+        playlist_role: Option<bool>,
+        cover_art_role: Option<bool>,
+        comment_role: Option<bool>,
+        podcast_role: Option<bool>,
+        share_role: Option<bool>,
+        video_conversion_role: Option<bool>,
+        max_bit_rate: Option<i32>,
+    ) -> Result<(), String> {
+        // If password is being updated, update that first
+        if let Some(pwd) = password {
+            self.change_password(username, pwd)?;
+        }
+
+        // Build update struct
+        let update = UserUpdate {
+            username: username.to_string(),
+            email: email.map(|e| e.to_string()),
+            admin_role,
+            settings_role,
+            stream_role,
+            jukebox_role,
+            download_role,
+            upload_role,
+            playlist_role,
+            cover_art_role,
+            comment_role,
+            podcast_role,
+            share_role,
+            video_conversion_role,
+            max_bit_rate,
+        };
+
+        self.user_repo.update_user(&update).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    fn get_db_pool(&self) -> DbPool {
+        self.pool.clone()
+    }
+
+    fn get_scan_state(&self) -> Arc<ScanState> {
+        self.scan_state.clone()
     }
 }
 

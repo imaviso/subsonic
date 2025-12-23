@@ -412,7 +412,9 @@ pub async fn search3(
     auth: SubsonicAuth,
 ) -> impl IntoResponse {
     // Empty query is allowed - it returns all results
-    let query = params.query.as_deref().unwrap_or("");
+    // Some clients send "" (quoted empty string) which we need to handle
+    let raw_query = params.query.as_deref().unwrap_or("");
+    let query = raw_query.trim_matches('"').trim();
 
     let artist_count = params.artist_count.unwrap_or(20).min(500).max(0);
     let artist_offset = params.artist_offset.unwrap_or(0).max(0);

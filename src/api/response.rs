@@ -881,6 +881,45 @@ mod xml {
             }
         }
     }
+
+    /// Empty bookmarks response for XML format.
+    #[derive(Debug, Serialize)]
+    pub struct Bookmarks {
+        // Empty - no bookmarks implemented yet
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct BookmarksResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "bookmarks")]
+        pub bookmarks: Bookmarks,
+    }
+
+    impl BookmarksResponse {
+        pub fn new() -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                bookmarks: Bookmarks {},
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -943,12 +982,20 @@ mod json {
         pub users: Option<super::UsersResponse>,
         #[serde(skip_serializing_if = "Option::is_none", rename = "scanStatus")]
         pub scan_status: Option<ScanStatusJson>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub bookmarks: Option<BookmarksJson>,
     }
 
     #[derive(Debug, Serialize)]
     pub struct ScanStatusJson {
         pub scanning: bool,
         pub count: u64,
+    }
+
+    /// Empty bookmarks response for JSON format.
+    #[derive(Debug, Serialize)]
+    pub struct BookmarksJson {
+        // Empty - no bookmarks implemented yet
     }
 
     #[derive(Debug, Serialize)]
@@ -1004,6 +1051,7 @@ mod json {
                 user: None,
                 users: None,
                 scan_status: None,
+                bookmarks: None,
             }
         }
 
@@ -1036,6 +1084,7 @@ mod json {
                 user: None,
                 users: None,
                 scan_status: None,
+                bookmarks: None,
             }
         }
 
@@ -1144,6 +1193,11 @@ mod json {
             self
         }
 
+        pub fn with_bookmarks(mut self) -> Self {
+            self.bookmarks = Some(BookmarksJson {});
+            self
+        }
+
         pub fn wrap(self) -> JsonWrapper {
             JsonWrapper {
                 subsonic_response: self,
@@ -1186,6 +1240,7 @@ enum ResponseKind {
     User(UserResponse),
     Users(UsersResponse),
     ScanStatus { scanning: bool, count: u64 },
+    Bookmarks,
 }
 
 impl SubsonicResponse {
@@ -1352,6 +1407,13 @@ impl SubsonicResponse {
             kind: ResponseKind::ScanStatus { scanning, count },
         }
     }
+
+    pub fn bookmarks(format: Format) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::Bookmarks,
+        }
+    }
 }
 
 impl IntoResponse for SubsonicResponse {
@@ -1437,6 +1499,9 @@ impl SubsonicResponse {
             }
             ResponseKind::ScanStatus { scanning, count } => {
                 quick_xml::se::to_string(&xml::ScanStatusResponse::new(scanning, count))
+            }
+            ResponseKind::Bookmarks => {
+                quick_xml::se::to_string(&xml::BookmarksResponse::new())
             }
         };
 
@@ -1524,6 +1589,9 @@ impl SubsonicResponse {
             }
             ResponseKind::ScanStatus { scanning, count } => {
                 json::SubsonicResponse::ok().with_scan_status(scanning, count).wrap()
+            }
+            ResponseKind::Bookmarks => {
+                json::SubsonicResponse::ok().with_bookmarks().wrap()
             }
         };
 
@@ -1702,4 +1770,9 @@ pub fn ok_users(format: Format, users: UsersResponse) -> SubsonicResponse {
 /// Helper function to create a scan status response.
 pub fn ok_scan_status(format: Format, scanning: bool, count: u64) -> SubsonicResponse {
     SubsonicResponse::scan_status(format, scanning, count)
+}
+
+/// Helper function to create an empty bookmarks response.
+pub fn ok_bookmarks(format: Format) -> SubsonicResponse {
+    SubsonicResponse::bookmarks(format)
 }

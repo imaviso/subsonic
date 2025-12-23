@@ -134,6 +134,8 @@ fn create_router(state: AppState) -> Router {
         .subsonic_route("/ping", handlers::ping)
         .subsonic_route("/getLicense", handlers::get_license)
         .subsonic_route("/getOpenSubsonicExtensions", handlers::get_open_subsonic_extensions)
+        // Bookmarks endpoints
+        .subsonic_route("/getBookmarks", handlers::get_bookmarks)
         // Browsing endpoints
         .subsonic_route("/getMusicFolders", handlers::get_music_folders)
         .subsonic_route("/getIndexes", handlers::get_indexes)

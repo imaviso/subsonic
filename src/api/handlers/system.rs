@@ -3,7 +3,7 @@
 use axum::response::IntoResponse;
 
 use crate::api::auth::SubsonicAuth;
-use crate::api::response::{ok_empty, ok_license, ok_open_subsonic_extensions};
+use crate::api::response::{ok_bookmarks, ok_empty, ok_license, ok_open_subsonic_extensions};
 
 /// GET/POST /rest/ping[.view]
 ///
@@ -27,4 +27,13 @@ pub async fn get_license(auth: SubsonicAuth) -> impl IntoResponse {
 /// This endpoint is part of the OpenSubsonic specification.
 pub async fn get_open_subsonic_extensions(auth: SubsonicAuth) -> impl IntoResponse {
     ok_open_subsonic_extensions(auth.format)
+}
+
+/// GET/POST /rest/getBookmarks[.view]
+///
+/// Returns all bookmarks for this user.
+/// A bookmark is a position within a certain media file.
+/// Currently returns an empty list (bookmarks not yet implemented).
+pub async fn get_bookmarks(auth: SubsonicAuth) -> impl IntoResponse {
+    ok_bookmarks(auth.format)
 }

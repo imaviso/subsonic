@@ -11,12 +11,13 @@ use serde::Serialize;
 
 use super::error::ApiError;
 use crate::models::music::{
-    AlbumInfoResponse, AlbumList2Response, AlbumWithSongsID3Response, ArtistID3Response,
-    ArtistInfo2Response, ArtistWithAlbumsID3Response, ArtistsID3Response, ChildResponse,
-    GenresResponse, IndexesResponse, LyricsResponse, MusicFolderResponse, NowPlayingResponse,
-    PlaylistWithSongsResponse, PlaylistsResponse, PlayQueueResponse, RandomSongsResponse,
-    SearchResult3Response, SimilarSongs2Response, SongsByGenreResponse, Starred2Response,
-    TopSongsResponse,
+    AlbumInfoResponse, AlbumList2Response, AlbumListResponse, AlbumWithSongsID3Response,
+    ArtistInfo2Response, ArtistInfoResponse, ArtistWithAlbumsID3Response, ArtistsID3Response,
+    ChildResponse, DirectoryResponse, GenresResponse, IndexesResponse, LyricsResponse,
+    MusicFolderResponse, NowPlayingResponse, PlaylistWithSongsResponse, PlaylistsResponse,
+    PlayQueueResponse, RandomSongsResponse, SearchResult2Response, SearchResult3Response,
+    SearchResultResponse, SimilarSongs2Response, SimilarSongsResponse, SongsByGenreResponse,
+    Starred2Response, StarredResponse, TopSongsResponse,
 };
 use crate::models::user::{UserResponse, UsersResponse};
 
@@ -1087,6 +1088,237 @@ mod xml {
             }
         }
     }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct DirectoryResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "directory")]
+        pub directory: super::DirectoryResponse,
+    }
+
+    impl DirectoryResponse {
+        pub fn new(directory: super::DirectoryResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                directory,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct AlbumListResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "albumList")]
+        pub album_list: super::AlbumListResponse,
+    }
+
+    impl AlbumListResponse {
+        pub fn new(album_list: super::AlbumListResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                album_list,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct StarredResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "starred")]
+        pub starred: super::StarredResponse,
+    }
+
+    impl StarredResponse {
+        pub fn new(starred: super::StarredResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                starred,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct SearchResult2Response {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "searchResult2")]
+        pub search_result2: super::SearchResult2Response,
+    }
+
+    impl SearchResult2Response {
+        pub fn new(search_result2: super::SearchResult2Response) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                search_result2,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct SearchResultResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "searchResult")]
+        pub search_result: super::SearchResultResponse,
+    }
+
+    impl SearchResultResponse {
+        pub fn new(search_result: super::SearchResultResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                search_result,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct ArtistInfoResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "artistInfo")]
+        pub artist_info: super::ArtistInfoResponse,
+    }
+
+    impl ArtistInfoResponse {
+        pub fn new(artist_info: super::ArtistInfoResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                artist_info,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct SimilarSongsResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "similarSongs")]
+        pub similar_songs: super::SimilarSongsResponse,
+    }
+
+    impl SimilarSongsResponse {
+        pub fn new(similar_songs: super::SimilarSongsResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                similar_songs,
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -1161,6 +1393,20 @@ mod json {
         pub top_songs: Option<super::TopSongsResponse>,
         #[serde(skip_serializing_if = "Option::is_none")]
         pub lyrics: Option<super::LyricsResponse>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub directory: Option<super::DirectoryResponse>,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "albumList")]
+        pub album_list: Option<super::AlbumListResponse>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub starred: Option<super::StarredResponse>,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "searchResult2")]
+        pub search_result2: Option<super::SearchResult2Response>,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "searchResult")]
+        pub search_result: Option<super::SearchResultResponse>,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "artistInfo")]
+        pub artist_info: Option<super::ArtistInfoResponse>,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "similarSongs")]
+        pub similar_songs: Option<super::SimilarSongsResponse>,
     }
 
     #[derive(Debug, Serialize)]
@@ -1234,6 +1480,13 @@ mod json {
                 similar_songs2: None,
                 top_songs: None,
                 lyrics: None,
+                directory: None,
+                album_list: None,
+                starred: None,
+                search_result2: None,
+                search_result: None,
+                artist_info: None,
+                similar_songs: None,
             }
         }
 
@@ -1272,6 +1525,13 @@ mod json {
                 similar_songs2: None,
                 top_songs: None,
                 lyrics: None,
+                directory: None,
+                album_list: None,
+                starred: None,
+                search_result2: None,
+                search_result: None,
+                artist_info: None,
+                similar_songs: None,
             }
         }
 
@@ -1410,6 +1670,41 @@ mod json {
             self
         }
 
+        pub fn with_directory(mut self, directory: super::DirectoryResponse) -> Self {
+            self.directory = Some(directory);
+            self
+        }
+
+        pub fn with_album_list(mut self, album_list: super::AlbumListResponse) -> Self {
+            self.album_list = Some(album_list);
+            self
+        }
+
+        pub fn with_starred(mut self, starred: super::StarredResponse) -> Self {
+            self.starred = Some(starred);
+            self
+        }
+
+        pub fn with_search_result2(mut self, search_result2: super::SearchResult2Response) -> Self {
+            self.search_result2 = Some(search_result2);
+            self
+        }
+
+        pub fn with_search_result(mut self, search_result: super::SearchResultResponse) -> Self {
+            self.search_result = Some(search_result);
+            self
+        }
+
+        pub fn with_artist_info(mut self, artist_info: super::ArtistInfoResponse) -> Self {
+            self.artist_info = Some(artist_info);
+            self
+        }
+
+        pub fn with_similar_songs(mut self, similar_songs: super::SimilarSongsResponse) -> Self {
+            self.similar_songs = Some(similar_songs);
+            self
+        }
+
         pub fn wrap(self) -> JsonWrapper {
             JsonWrapper {
                 subsonic_response: self,
@@ -1458,6 +1753,14 @@ enum ResponseKind {
     SimilarSongs2(SimilarSongs2Response),
     TopSongs(TopSongsResponse),
     Lyrics(LyricsResponse),
+    // Non-ID3 endpoints
+    Directory(DirectoryResponse),
+    AlbumList(AlbumListResponse),
+    Starred(StarredResponse),
+    SearchResult2(SearchResult2Response),
+    SearchResult(SearchResultResponse),
+    ArtistInfo(ArtistInfoResponse),
+    SimilarSongs(SimilarSongsResponse),
 }
 
 impl SubsonicResponse {
@@ -1666,6 +1969,55 @@ impl SubsonicResponse {
             kind: ResponseKind::Lyrics(lyrics),
         }
     }
+
+    pub fn directory(format: Format, directory: DirectoryResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::Directory(directory),
+        }
+    }
+
+    pub fn album_list(format: Format, album_list: AlbumListResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::AlbumList(album_list),
+        }
+    }
+
+    pub fn starred(format: Format, starred: StarredResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::Starred(starred),
+        }
+    }
+
+    pub fn search_result2(format: Format, search_result2: SearchResult2Response) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::SearchResult2(search_result2),
+        }
+    }
+
+    pub fn search_result(format: Format, search_result: SearchResultResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::SearchResult(search_result),
+        }
+    }
+
+    pub fn artist_info(format: Format, artist_info: ArtistInfoResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::ArtistInfo(artist_info),
+        }
+    }
+
+    pub fn similar_songs(format: Format, similar_songs: SimilarSongsResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::SimilarSongs(similar_songs),
+        }
+    }
 }
 
 impl IntoResponse for SubsonicResponse {
@@ -1769,6 +2121,27 @@ impl SubsonicResponse {
             }
             ResponseKind::Lyrics(lyrics) => {
                 quick_xml::se::to_string(&xml::LyricsResponse::new(lyrics))
+            }
+            ResponseKind::Directory(directory) => {
+                quick_xml::se::to_string(&xml::DirectoryResponse::new(directory))
+            }
+            ResponseKind::AlbumList(album_list) => {
+                quick_xml::se::to_string(&xml::AlbumListResponse::new(album_list))
+            }
+            ResponseKind::Starred(starred) => {
+                quick_xml::se::to_string(&xml::StarredResponse::new(starred))
+            }
+            ResponseKind::SearchResult2(search_result2) => {
+                quick_xml::se::to_string(&xml::SearchResult2Response::new(search_result2))
+            }
+            ResponseKind::SearchResult(search_result) => {
+                quick_xml::se::to_string(&xml::SearchResultResponse::new(search_result))
+            }
+            ResponseKind::ArtistInfo(artist_info) => {
+                quick_xml::se::to_string(&xml::ArtistInfoResponse::new(artist_info))
+            }
+            ResponseKind::SimilarSongs(similar_songs) => {
+                quick_xml::se::to_string(&xml::SimilarSongsResponse::new(similar_songs))
             }
         };
 
@@ -1874,6 +2247,27 @@ impl SubsonicResponse {
             }
             ResponseKind::Lyrics(lyrics) => {
                 json::SubsonicResponse::ok().with_lyrics(lyrics).wrap()
+            }
+            ResponseKind::Directory(directory) => {
+                json::SubsonicResponse::ok().with_directory(directory).wrap()
+            }
+            ResponseKind::AlbumList(album_list) => {
+                json::SubsonicResponse::ok().with_album_list(album_list).wrap()
+            }
+            ResponseKind::Starred(starred) => {
+                json::SubsonicResponse::ok().with_starred(starred).wrap()
+            }
+            ResponseKind::SearchResult2(search_result2) => {
+                json::SubsonicResponse::ok().with_search_result2(search_result2).wrap()
+            }
+            ResponseKind::SearchResult(search_result) => {
+                json::SubsonicResponse::ok().with_search_result(search_result).wrap()
+            }
+            ResponseKind::ArtistInfo(artist_info) => {
+                json::SubsonicResponse::ok().with_artist_info(artist_info).wrap()
+            }
+            ResponseKind::SimilarSongs(similar_songs) => {
+                json::SubsonicResponse::ok().with_similar_songs(similar_songs).wrap()
             }
         };
 
@@ -2082,4 +2476,39 @@ pub fn ok_top_songs(format: Format, top_songs: TopSongsResponse) -> SubsonicResp
 /// Helper function to create a lyrics response.
 pub fn ok_lyrics(format: Format, lyrics: LyricsResponse) -> SubsonicResponse {
     SubsonicResponse::lyrics(format, lyrics)
+}
+
+/// Helper function to create a directory response (getMusicDirectory).
+pub fn ok_directory(format: Format, directory: DirectoryResponse) -> SubsonicResponse {
+    SubsonicResponse::directory(format, directory)
+}
+
+/// Helper function to create an album list response (getAlbumList).
+pub fn ok_album_list(format: Format, album_list: AlbumListResponse) -> SubsonicResponse {
+    SubsonicResponse::album_list(format, album_list)
+}
+
+/// Helper function to create a starred response (getStarred).
+pub fn ok_starred(format: Format, starred: StarredResponse) -> SubsonicResponse {
+    SubsonicResponse::starred(format, starred)
+}
+
+/// Helper function to create a search result2 response (search2).
+pub fn ok_search_result2(format: Format, search_result2: SearchResult2Response) -> SubsonicResponse {
+    SubsonicResponse::search_result2(format, search_result2)
+}
+
+/// Helper function to create a search result response (search).
+pub fn ok_search_result(format: Format, search_result: SearchResultResponse) -> SubsonicResponse {
+    SubsonicResponse::search_result(format, search_result)
+}
+
+/// Helper function to create an artist info response (getArtistInfo).
+pub fn ok_artist_info(format: Format, artist_info: ArtistInfoResponse) -> SubsonicResponse {
+    SubsonicResponse::artist_info(format, artist_info)
+}
+
+/// Helper function to create a similar songs response (getSimilarSongs).
+pub fn ok_similar_songs(format: Format, similar_songs: SimilarSongsResponse) -> SubsonicResponse {
+    SubsonicResponse::similar_songs(format, similar_songs)
 }

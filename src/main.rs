@@ -152,6 +152,19 @@ fn create_router(state: AppState) -> Router {
         .subsonic_route("/getAlbumInfo2", handlers::get_album_info2)
         .subsonic_route("/getSimilarSongs2", handlers::get_similar_songs2)
         .subsonic_route("/getTopSongs", handlers::get_top_songs)
+        // Non-ID3 browsing endpoints (for older clients)
+        .subsonic_route("/getMusicDirectory", handlers::get_music_directory)
+        .subsonic_route("/getAlbumList", handlers::get_album_list)
+        .subsonic_route("/getStarred", handlers::get_starred)
+        .subsonic_route("/getArtistInfo", handlers::get_artist_info)
+        .subsonic_route("/getAlbumInfo", handlers::get_album_info)
+        .subsonic_route("/getSimilarSongs", handlers::get_similar_songs)
+        // Search endpoints
+        .subsonic_route("/search2", handlers::search2)
+        .subsonic_route("/search", handlers::search)
+        // Lyrics endpoints
+        .subsonic_route("/getLyrics", handlers::get_lyrics)
+        .subsonic_route("/getLyricsBySongId", handlers::get_lyrics_by_song_id)
         // Annotation endpoints
         .subsonic_route("/star", handlers::star)
         .subsonic_route("/unstar", handlers::unstar)

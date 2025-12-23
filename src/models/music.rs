@@ -1173,3 +1173,310 @@ impl LyricsResponse {
         }
     }
 }
+
+// ============================================================================
+// Response types for getMusicDirectory (non-ID3 folder browsing)
+// ============================================================================
+
+/// Directory response for getMusicDirectory.
+#[derive(Debug, Serialize, Clone)]
+pub struct DirectoryResponse {
+    #[serde(rename = "@id")]
+    pub id: String,
+    #[serde(rename = "@parent", skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
+    #[serde(rename = "@name")]
+    pub name: String,
+    #[serde(rename = "@starred", skip_serializing_if = "Option::is_none")]
+    pub starred: Option<String>,
+    #[serde(rename = "@playCount", skip_serializing_if = "Option::is_none")]
+    pub play_count: Option<i32>,
+    #[serde(rename = "child", skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<ChildResponse>,
+}
+
+impl DirectoryResponse {
+    /// Create a directory response from a music folder.
+    pub fn from_music_folder(folder: &MusicFolder, children: Vec<ChildResponse>) -> Self {
+        Self {
+            id: folder.id.to_string(),
+            parent: None,
+            name: folder.name.clone(),
+            starred: None,
+            play_count: None,
+            children,
+        }
+    }
+
+    /// Create a directory response from an artist.
+    pub fn from_artist(artist: &Artist, children: Vec<ChildResponse>) -> Self {
+        Self {
+            id: artist.id.to_string(),
+            parent: None,
+            name: artist.name.clone(),
+            starred: None,
+            play_count: None,
+            children,
+        }
+    }
+
+    /// Create a directory response from an album.
+    pub fn from_album(album: &Album, children: Vec<ChildResponse>) -> Self {
+        Self {
+            id: album.id.to_string(),
+            parent: album.artist_id.map(|id| id.to_string()),
+            name: album.name.clone(),
+            starred: None,
+            play_count: Some(album.play_count),
+            children,
+        }
+    }
+}
+
+impl ChildResponse {
+    /// Create a child response representing an artist (as directory).
+    pub fn from_artist_as_dir(artist: &Artist) -> Self {
+        Self {
+            id: artist.id.to_string(),
+            parent: None,
+            is_dir: true,
+            title: artist.name.clone(),
+            album: None,
+            artist: Some(artist.name.clone()),
+            track: None,
+            year: None,
+            genre: None,
+            cover_art: artist.cover_art.clone(),
+            size: None,
+            content_type: None,
+            suffix: None,
+            duration: None,
+            bit_rate: None,
+            bit_depth: None,
+            sampling_rate: None,
+            channel_count: None,
+            path: None,
+            play_count: None,
+            disc_number: None,
+            created: Some(artist.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()),
+            album_id: None,
+            artist_id: Some(artist.id.to_string()),
+            media_type: None,
+            starred: None,
+        }
+    }
+
+    /// Create a child response representing an album (as directory).
+    pub fn from_album_as_dir(album: &Album) -> Self {
+        Self {
+            id: album.id.to_string(),
+            parent: album.artist_id.map(|id| id.to_string()),
+            is_dir: true,
+            title: album.name.clone(),
+            album: Some(album.name.clone()),
+            artist: album.artist_name.clone(),
+            track: None,
+            year: album.year,
+            genre: album.genre.clone(),
+            cover_art: album.cover_art.clone(),
+            size: None,
+            content_type: None,
+            suffix: None,
+            duration: Some(album.duration),
+            bit_rate: None,
+            bit_depth: None,
+            sampling_rate: None,
+            channel_count: None,
+            path: None,
+            play_count: Some(album.play_count),
+            disc_number: None,
+            created: Some(album.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()),
+            album_id: Some(album.id.to_string()),
+            artist_id: album.artist_id.map(|id| id.to_string()),
+            media_type: None,
+            starred: None,
+        }
+    }
+}
+
+// ============================================================================
+// Response types for getAlbumList (non-ID3)
+// ============================================================================
+
+/// Album list response for getAlbumList (non-ID3 version).
+#[derive(Debug, Serialize, Clone)]
+pub struct AlbumListResponse {
+    #[serde(rename = "album", skip_serializing_if = "Vec::is_empty")]
+    pub albums: Vec<ChildResponse>,
+}
+
+// ============================================================================
+// Response types for getStarred (non-ID3)
+// ============================================================================
+
+/// Starred response for getStarred (non-ID3).
+#[derive(Debug, Serialize, Clone)]
+pub struct StarredResponse {
+    #[serde(rename = "artist", skip_serializing_if = "Vec::is_empty")]
+    pub artists: Vec<ArtistResponse>,
+    #[serde(rename = "album", skip_serializing_if = "Vec::is_empty")]
+    pub albums: Vec<ChildResponse>,
+    #[serde(rename = "song", skip_serializing_if = "Vec::is_empty")]
+    pub songs: Vec<ChildResponse>,
+}
+
+impl ArtistResponse {
+    /// Create an artist response with starred timestamp.
+    pub fn from_artist_with_starred(artist: &Artist, starred_at: Option<&chrono::NaiveDateTime>) -> Self {
+        Self {
+            id: artist.id.to_string(),
+            name: artist.name.clone(),
+            artist_image_url: artist.artist_image_url.clone(),
+            starred: starred_at.map(|dt| dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()),
+            user_rating: None,
+            average_rating: None,
+        }
+    }
+}
+
+// ============================================================================
+// Response types for search2 (older search API)
+// ============================================================================
+
+/// Search result response for search2 (non-ID3).
+#[derive(Debug, Serialize, Clone)]
+pub struct SearchResult2Response {
+    #[serde(rename = "artist", skip_serializing_if = "Vec::is_empty")]
+    pub artists: Vec<ArtistResponse>,
+    #[serde(rename = "album", skip_serializing_if = "Vec::is_empty")]
+    pub albums: Vec<ChildResponse>,
+    #[serde(rename = "song", skip_serializing_if = "Vec::is_empty")]
+    pub songs: Vec<ChildResponse>,
+}
+
+// ============================================================================
+// Response types for search (legacy search API)
+// ============================================================================
+
+/// Match entry for legacy search.
+#[derive(Debug, Serialize, Clone)]
+pub struct SearchMatch {
+    #[serde(rename = "@id")]
+    pub id: String,
+    #[serde(rename = "@parent", skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
+    #[serde(rename = "@isDir")]
+    pub is_dir: bool,
+    #[serde(rename = "@title")]
+    pub title: String,
+    #[serde(rename = "@album", skip_serializing_if = "Option::is_none")]
+    pub album: Option<String>,
+    #[serde(rename = "@artist", skip_serializing_if = "Option::is_none")]
+    pub artist: Option<String>,
+    #[serde(rename = "@track", skip_serializing_if = "Option::is_none")]
+    pub track: Option<i32>,
+    #[serde(rename = "@year", skip_serializing_if = "Option::is_none")]
+    pub year: Option<i32>,
+    #[serde(rename = "@genre", skip_serializing_if = "Option::is_none")]
+    pub genre: Option<String>,
+    #[serde(rename = "@coverArt", skip_serializing_if = "Option::is_none")]
+    pub cover_art: Option<String>,
+    #[serde(rename = "@size", skip_serializing_if = "Option::is_none")]
+    pub size: Option<i64>,
+    #[serde(rename = "@contentType", skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
+    #[serde(rename = "@suffix", skip_serializing_if = "Option::is_none")]
+    pub suffix: Option<String>,
+    #[serde(rename = "@duration", skip_serializing_if = "Option::is_none")]
+    pub duration: Option<i32>,
+    #[serde(rename = "@bitRate", skip_serializing_if = "Option::is_none")]
+    pub bit_rate: Option<i32>,
+    #[serde(rename = "@path", skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(rename = "@created", skip_serializing_if = "Option::is_none")]
+    pub created: Option<String>,
+}
+
+impl From<&Song> for SearchMatch {
+    fn from(song: &Song) -> Self {
+        Self {
+            id: song.id.to_string(),
+            parent: song.album_id.map(|id| id.to_string()),
+            is_dir: false,
+            title: song.title.clone(),
+            album: song.album_name.clone(),
+            artist: song.artist_name.clone(),
+            track: song.track_number,
+            year: song.year,
+            genre: song.genre.clone(),
+            cover_art: song.cover_art.clone(),
+            size: Some(song.file_size),
+            content_type: Some(song.content_type.clone()),
+            suffix: Some(song.suffix.clone()),
+            duration: Some(song.duration),
+            bit_rate: song.bit_rate,
+            path: Some(song.path.clone()),
+            created: Some(song.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()),
+        }
+    }
+}
+
+/// Search result response for legacy search.
+#[derive(Debug, Serialize, Clone)]
+pub struct SearchResultResponse {
+    #[serde(rename = "@offset")]
+    pub offset: i64,
+    #[serde(rename = "@totalHits")]
+    pub total_hits: i64,
+    #[serde(rename = "match", skip_serializing_if = "Vec::is_empty")]
+    pub matches: Vec<SearchMatch>,
+}
+
+// ============================================================================
+// Response types for getArtistInfo (non-ID3)
+// ============================================================================
+
+/// Artist info response for getArtistInfo (non-ID3).
+#[derive(Debug, Serialize, Clone)]
+pub struct ArtistInfoResponse {
+    #[serde(rename = "@biography", skip_serializing_if = "Option::is_none")]
+    pub biography: Option<String>,
+    #[serde(rename = "@musicBrainzId", skip_serializing_if = "Option::is_none")]
+    pub musicbrainz_id: Option<String>,
+    #[serde(rename = "@lastFmUrl", skip_serializing_if = "Option::is_none")]
+    pub last_fm_url: Option<String>,
+    #[serde(rename = "@smallImageUrl", skip_serializing_if = "Option::is_none")]
+    pub small_image_url: Option<String>,
+    #[serde(rename = "@mediumImageUrl", skip_serializing_if = "Option::is_none")]
+    pub medium_image_url: Option<String>,
+    #[serde(rename = "@largeImageUrl", skip_serializing_if = "Option::is_none")]
+    pub large_image_url: Option<String>,
+    #[serde(rename = "similarArtist", skip_serializing_if = "Vec::is_empty")]
+    pub similar_artists: Vec<ArtistResponse>,
+}
+
+impl ArtistInfoResponse {
+    /// Create an artist info response from an artist.
+    pub fn from_artist(artist: &Artist) -> Self {
+        Self {
+            biography: None,
+            musicbrainz_id: artist.musicbrainz_id.clone(),
+            last_fm_url: None,
+            small_image_url: artist.artist_image_url.clone(),
+            medium_image_url: artist.artist_image_url.clone(),
+            large_image_url: artist.artist_image_url.clone(),
+            similar_artists: Vec::new(),
+        }
+    }
+}
+
+// ============================================================================
+// Response types for getSimilarSongs (non-ID3)
+// ============================================================================
+
+/// Similar songs response for getSimilarSongs (non-ID3).
+#[derive(Debug, Serialize, Clone)]
+pub struct SimilarSongsResponse {
+    #[serde(rename = "song", skip_serializing_if = "Vec::is_empty")]
+    pub songs: Vec<ChildResponse>,
+}

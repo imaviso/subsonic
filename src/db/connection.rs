@@ -347,6 +347,133 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result:
     )
     .execute(conn)?;
 
+    // Create user_ratings table for song/album/artist ratings
+    diesel::sql_query(
+        r#"
+        CREATE TABLE IF NOT EXISTS user_ratings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            song_id INTEGER REFERENCES songs(id) ON DELETE CASCADE,
+            album_id INTEGER REFERENCES albums(id) ON DELETE CASCADE,
+            artist_id INTEGER REFERENCES artists(id) ON DELETE CASCADE,
+            rating INTEGER NOT NULL CHECK (rating >= 0 AND rating <= 5),
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CHECK (
+                (song_id IS NOT NULL AND album_id IS NULL AND artist_id IS NULL) OR
+                (song_id IS NULL AND album_id IS NOT NULL AND artist_id IS NULL) OR
+                (song_id IS NULL AND album_id IS NULL AND artist_id IS NOT NULL)
+            )
+        )
+        "#,
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_user_ratings_user_id ON user_ratings(user_id)"
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_ratings_user_song ON user_ratings(user_id, song_id) WHERE song_id IS NOT NULL"
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_ratings_user_album ON user_ratings(user_id, album_id) WHERE album_id IS NOT NULL"
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_ratings_user_artist ON user_ratings(user_id, artist_id) WHERE artist_id IS NOT NULL"
+    )
+    .execute(conn)?;
+
+    // Create playlists table
+    diesel::sql_query(
+        r#"
+        CREATE TABLE IF NOT EXISTS playlists (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            comment TEXT,
+            public BOOLEAN NOT NULL DEFAULT FALSE,
+            song_count INTEGER NOT NULL DEFAULT 0,
+            duration INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_playlists_user_id ON playlists(user_id)"
+    )
+    .execute(conn)?;
+
+    // Create playlist_songs table
+    diesel::sql_query(
+        r#"
+        CREATE TABLE IF NOT EXISTS playlist_songs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+            song_id INTEGER NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+            position INTEGER NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_playlist_songs_playlist_id ON playlist_songs(playlist_id)"
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_playlist_songs_song_id ON playlist_songs(song_id)"
+    )
+    .execute(conn)?;
+
+    // Create play_queue table for per-user play queue state
+    diesel::sql_query(
+        r#"
+        CREATE TABLE IF NOT EXISTS play_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            current_song_id INTEGER REFERENCES songs(id) ON DELETE SET NULL,
+            position BIGINT,
+            changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            changed_by TEXT
+        )
+        "#,
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_play_queue_user_id ON play_queue(user_id)"
+    )
+    .execute(conn)?;
+
+    // Create play_queue_songs table for songs in the play queue
+    diesel::sql_query(
+        r#"
+        CREATE TABLE IF NOT EXISTS play_queue_songs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            play_queue_id INTEGER NOT NULL REFERENCES play_queue(id) ON DELETE CASCADE,
+            song_id INTEGER NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+            position INTEGER NOT NULL
+        )
+        "#,
+    )
+    .execute(conn)?;
+
+    diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_play_queue_songs_queue_id ON play_queue_songs(play_queue_id)"
+    )
+    .execute(conn)?;
+
     Ok(())
 }
 

@@ -1,0 +1,124 @@
+//! Play queue API handlers (getPlayQueue, savePlayQueue)
+
+use axum::extract::RawQuery;
+use axum::response::IntoResponse;
+
+use crate::api::auth::SubsonicAuth;
+use crate::api::response::{ok_empty, ok_play_queue};
+use crate::models::music::{ChildResponse, PlayQueueResponse};
+
+/// Parse repeated query parameters from a query string.
+/// Handles both single values and repeated parameters like `?id=1&id=2`.
+fn parse_repeated_param(query: &str, param_name: &str) -> Vec<String> {
+    let mut values = Vec::new();
+    for part in query.split('&') {
+        if let Some((key, value)) = part.split_once('=') {
+            if key == param_name {
+                // URL decode the value
+                if let Ok(decoded) = urlencoding::decode(value) {
+                    values.push(decoded.into_owned());
+                } else {
+                    values.push(value.to_string());
+                }
+            }
+        }
+    }
+    values
+}
+
+/// GET/POST /rest/getPlayQueue[.view]
+///
+/// Returns the current play queue for the user.
+pub async fn get_play_queue(auth: SubsonicAuth) -> impl IntoResponse {
+    let user_id = auth.user.id;
+    let username = &auth.user.username;
+
+    match auth.state.get_play_queue(user_id, username) {
+        Some(play_queue) => {
+            let song_responses: Vec<ChildResponse> = play_queue
+                .songs
+                .iter()
+                .map(|s| {
+                    let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
+                    ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+                })
+                .collect();
+
+            let response = PlayQueueResponse {
+                current: play_queue.current_song.as_ref().map(|s| s.id.to_string()),
+                position: play_queue.position,
+                username: play_queue.username.clone(),
+                changed: play_queue.changed_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+                changed_by: play_queue.changed_by.clone(),
+                entries: song_responses,
+            };
+
+            ok_play_queue(auth.format, response)
+        }
+        None => {
+            // Return empty play queue
+            let response = PlayQueueResponse {
+                current: None,
+                position: None,
+                username: username.clone(),
+                changed: chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+                changed_by: None,
+                entries: vec![],
+            };
+
+            ok_play_queue(auth.format, response)
+        }
+    }
+}
+
+/// GET/POST /rest/savePlayQueue[.view]
+///
+/// Saves the current play queue for the user.
+/// 
+/// Parameters:
+/// - `id`: ID of a song in the play queue (can be repeated to define the entire queue)
+/// - `current`: The ID of the currently playing song
+/// - `position`: Position in milliseconds within the currently playing song
+pub async fn save_play_queue(
+    RawQuery(query): RawQuery,
+    auth: SubsonicAuth,
+) -> impl IntoResponse {
+    let query = query.unwrap_or_default();
+    let user_id = auth.user.id;
+
+    // Parse song IDs from repeated parameters
+    let song_ids: Vec<i32> = parse_repeated_param(&query, "id")
+        .iter()
+        .filter_map(|id| id.parse::<i32>().ok())
+        .collect();
+
+    // Parse current song ID
+    let current_song_id: Option<i32> = parse_repeated_param(&query, "current")
+        .first()
+        .and_then(|id| id.parse::<i32>().ok());
+
+    // Parse position
+    let position: Option<i64> = parse_repeated_param(&query, "position")
+        .first()
+        .and_then(|p| p.parse::<i64>().ok());
+
+    // Get the client identifier as changed_by
+    let changed_by = if auth.params.c.is_empty() {
+        None
+    } else {
+        Some(auth.params.c.as_str())
+    };
+
+    if let Err(e) = auth.state.save_play_queue(
+        user_id,
+        &song_ids,
+        current_song_id,
+        position,
+        changed_by,
+    ) {
+        tracing::warn!("Failed to save play queue: {}", e);
+        // Don't return an error - the API spec says this should succeed silently
+    }
+
+    ok_empty(auth.format)
+}

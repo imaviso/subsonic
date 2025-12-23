@@ -34,7 +34,7 @@ use serde::Deserialize;
 
 use super::error::ApiError;
 use super::response::{error_response, Format};
-use crate::db::{DbPool, UserRepository, MusicFolderRepository, ArtistRepository, SongRepository, AlbumRepository, StarredRepository, NowPlayingRepository, ScrobbleRepository, NowPlayingEntry};
+use crate::db::{DbPool, UserRepository, MusicFolderRepository, ArtistRepository, SongRepository, AlbumRepository, StarredRepository, NowPlayingRepository, ScrobbleRepository, NowPlayingEntry, RatingRepository, PlaylistRepository, PlayQueueRepository, Playlist, PlayQueue};
 use crate::models::User;
 use crate::models::music::{MusicFolder, Artist, Song, Album};
 use chrono::NaiveDateTime;
@@ -127,6 +127,74 @@ pub trait AuthState: Send + Sync + 'static {
     fn set_now_playing(&self, user_id: i32, song_id: i32, player_id: Option<&str>) -> Result<(), String>;
     /// Get all currently playing songs.
     fn get_now_playing(&self) -> Vec<NowPlayingEntry>;
+
+    // Random/genre song methods
+    /// Get random songs with optional filters.
+    fn get_random_songs(
+        &self,
+        size: i64,
+        genre: Option<&str>,
+        from_year: Option<i32>,
+        to_year: Option<i32>,
+        music_folder_id: Option<i32>,
+    ) -> Vec<Song>;
+    /// Get songs by genre with pagination.
+    fn get_songs_by_genre(
+        &self,
+        genre: &str,
+        count: i64,
+        offset: i64,
+        music_folder_id: Option<i32>,
+    ) -> Vec<Song>;
+
+    // Rating methods
+    /// Set rating for a song (0 to remove, 1-5 to rate).
+    fn set_song_rating(&self, user_id: i32, song_id: i32, rating: i32) -> Result<(), String>;
+    /// Set rating for an album.
+    fn set_album_rating(&self, user_id: i32, album_id: i32, rating: i32) -> Result<(), String>;
+    /// Set rating for an artist.
+    fn set_artist_rating(&self, user_id: i32, artist_id: i32, rating: i32) -> Result<(), String>;
+    /// Get rating for a song.
+    fn get_song_rating(&self, user_id: i32, song_id: i32) -> Option<i32>;
+    /// Get rating for an album.
+    fn get_album_rating(&self, user_id: i32, album_id: i32) -> Option<i32>;
+
+    // Playlist methods
+    /// Get all playlists for a user.
+    fn get_playlists(&self, user_id: i32, username: &str) -> Vec<Playlist>;
+    /// Get a playlist by ID with songs.
+    fn get_playlist(&self, playlist_id: i32) -> Option<Playlist>;
+    /// Get songs in a playlist.
+    fn get_playlist_songs(&self, playlist_id: i32) -> Vec<Song>;
+    /// Create a new playlist.
+    fn create_playlist(&self, user_id: i32, name: &str, comment: Option<&str>, song_ids: &[i32]) -> Result<Playlist, String>;
+    /// Update a playlist.
+    fn update_playlist(
+        &self,
+        playlist_id: i32,
+        name: Option<&str>,
+        comment: Option<&str>,
+        public: Option<bool>,
+        song_ids_to_add: &[i32],
+        song_indices_to_remove: &[i32],
+    ) -> Result<(), String>;
+    /// Delete a playlist.
+    fn delete_playlist(&self, playlist_id: i32) -> Result<bool, String>;
+    /// Check if user owns a playlist.
+    fn is_playlist_owner(&self, user_id: i32, playlist_id: i32) -> bool;
+
+    // Play queue methods
+    /// Get the play queue for a user.
+    fn get_play_queue(&self, user_id: i32, username: &str) -> Option<PlayQueue>;
+    /// Save the play queue for a user.
+    fn save_play_queue(
+        &self,
+        user_id: i32,
+        song_ids: &[i32],
+        current_song_id: Option<i32>,
+        position: Option<i64>,
+        changed_by: Option<&str>,
+    ) -> Result<(), String>;
 }
 
 /// Common query parameters for all Subsonic API requests.
@@ -394,6 +462,9 @@ pub struct DatabaseAuthState {
     starred_repo: StarredRepository,
     now_playing_repo: NowPlayingRepository,
     scrobble_repo: ScrobbleRepository,
+    rating_repo: RatingRepository,
+    playlist_repo: PlaylistRepository,
+    play_queue_repo: PlayQueueRepository,
 }
 
 impl DatabaseAuthState {
@@ -407,7 +478,10 @@ impl DatabaseAuthState {
             song_repo: SongRepository::new(pool.clone()),
             starred_repo: StarredRepository::new(pool.clone()),
             now_playing_repo: NowPlayingRepository::new(pool.clone()),
-            scrobble_repo: ScrobbleRepository::new(pool),
+            scrobble_repo: ScrobbleRepository::new(pool.clone()),
+            rating_repo: RatingRepository::new(pool.clone()),
+            playlist_repo: PlaylistRepository::new(pool.clone()),
+            play_queue_repo: PlayQueueRepository::new(pool),
         }
     }
 
@@ -573,6 +647,98 @@ impl AuthState for DatabaseAuthState {
 
     fn get_now_playing(&self) -> Vec<NowPlayingEntry> {
         self.now_playing_repo.get_all_now_playing().unwrap_or_default()
+    }
+
+    fn get_random_songs(
+        &self,
+        size: i64,
+        genre: Option<&str>,
+        from_year: Option<i32>,
+        to_year: Option<i32>,
+        music_folder_id: Option<i32>,
+    ) -> Vec<Song> {
+        self.song_repo.find_random(size, genre, from_year, to_year, music_folder_id).unwrap_or_default()
+    }
+
+    fn get_songs_by_genre(
+        &self,
+        genre: &str,
+        count: i64,
+        offset: i64,
+        music_folder_id: Option<i32>,
+    ) -> Vec<Song> {
+        self.song_repo.find_by_genre(genre, count, offset, music_folder_id).unwrap_or_default()
+    }
+
+    fn set_song_rating(&self, user_id: i32, song_id: i32, rating: i32) -> Result<(), String> {
+        self.rating_repo.set_song_rating(user_id, song_id, rating).map_err(|e| e.to_string())
+    }
+
+    fn set_album_rating(&self, user_id: i32, album_id: i32, rating: i32) -> Result<(), String> {
+        self.rating_repo.set_album_rating(user_id, album_id, rating).map_err(|e| e.to_string())
+    }
+
+    fn set_artist_rating(&self, user_id: i32, artist_id: i32, rating: i32) -> Result<(), String> {
+        self.rating_repo.set_artist_rating(user_id, artist_id, rating).map_err(|e| e.to_string())
+    }
+
+    fn get_song_rating(&self, user_id: i32, song_id: i32) -> Option<i32> {
+        self.rating_repo.get_song_rating(user_id, song_id).ok().flatten()
+    }
+
+    fn get_album_rating(&self, user_id: i32, album_id: i32) -> Option<i32> {
+        self.rating_repo.get_album_rating(user_id, album_id).ok().flatten()
+    }
+
+    fn get_playlists(&self, user_id: i32, username: &str) -> Vec<Playlist> {
+        self.playlist_repo.get_playlists(user_id, username).unwrap_or_default()
+    }
+
+    fn get_playlist(&self, playlist_id: i32) -> Option<Playlist> {
+        self.playlist_repo.get_playlist(playlist_id).ok().flatten()
+    }
+
+    fn get_playlist_songs(&self, playlist_id: i32) -> Vec<Song> {
+        self.playlist_repo.get_playlist_songs(playlist_id).unwrap_or_default()
+    }
+
+    fn create_playlist(&self, user_id: i32, name: &str, comment: Option<&str>, song_ids: &[i32]) -> Result<Playlist, String> {
+        self.playlist_repo.create_playlist(user_id, name, comment, song_ids).map_err(|e| e.to_string())
+    }
+
+    fn update_playlist(
+        &self,
+        playlist_id: i32,
+        name: Option<&str>,
+        comment: Option<&str>,
+        public: Option<bool>,
+        song_ids_to_add: &[i32],
+        song_indices_to_remove: &[i32],
+    ) -> Result<(), String> {
+        self.playlist_repo.update_playlist(playlist_id, name, comment, public, song_ids_to_add, song_indices_to_remove).map_err(|e| e.to_string())
+    }
+
+    fn delete_playlist(&self, playlist_id: i32) -> Result<bool, String> {
+        self.playlist_repo.delete_playlist(playlist_id).map_err(|e| e.to_string())
+    }
+
+    fn is_playlist_owner(&self, user_id: i32, playlist_id: i32) -> bool {
+        self.playlist_repo.is_owner(user_id, playlist_id).unwrap_or(false)
+    }
+
+    fn get_play_queue(&self, user_id: i32, username: &str) -> Option<PlayQueue> {
+        self.play_queue_repo.get_play_queue(user_id, username).ok().flatten()
+    }
+
+    fn save_play_queue(
+        &self,
+        user_id: i32,
+        song_ids: &[i32],
+        current_song_id: Option<i32>,
+        position: Option<i64>,
+        changed_by: Option<&str>,
+    ) -> Result<(), String> {
+        self.play_queue_repo.save_play_queue(user_id, song_ids, current_song_id, position, changed_by).map_err(|e| e.to_string())
     }
 }
 

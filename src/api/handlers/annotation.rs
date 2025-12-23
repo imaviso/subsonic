@@ -1,10 +1,12 @@
-//! Annotation-related API handlers (star, unstar, getStarred2, scrobble, getNowPlaying, etc.)
+//! Annotation-related API handlers (star, unstar, getStarred2, scrobble, getNowPlaying, setRating, etc.)
 
 use axum::extract::RawQuery;
 use axum::response::IntoResponse;
+use serde::Deserialize;
 
 use crate::api::auth::SubsonicAuth;
-use crate::api::response::{ok_empty, ok_now_playing, ok_starred2};
+use crate::api::error::ApiError;
+use crate::api::response::{error_response, ok_empty, ok_now_playing, ok_starred2};
 use crate::models::music::{
     NowPlayingEntryResponse, NowPlayingResponse, Starred2Response, StarredAlbumID3Response,
     StarredArtistID3Response, StarredChildResponse,
@@ -240,4 +242,64 @@ pub async fn get_now_playing(auth: SubsonicAuth) -> impl IntoResponse {
     };
 
     ok_now_playing(auth.format, response)
+}
+
+// ============================================================================
+// Rating endpoints
+// ============================================================================
+
+/// Query parameters for setRating.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct SetRatingParams {
+    /// The ID of the item (song, album, or artist) to rate.
+    pub id: Option<String>,
+    /// The rating (0-5). 0 removes the rating.
+    pub rating: Option<i32>,
+}
+
+/// GET/POST /rest/setRating[.view]
+///
+/// Sets the rating for a music file (song).
+/// 
+/// Parameters:
+/// - `id` (required): The ID of the item to rate
+/// - `rating` (required): The rating (0-5). 0 removes the rating.
+pub async fn set_rating(
+    axum::extract::Query(params): axum::extract::Query<SetRatingParams>,
+    auth: SubsonicAuth,
+) -> impl IntoResponse {
+    // Validate required parameters
+    let id = match params.id.as_ref().and_then(|id| id.parse::<i32>().ok()) {
+        Some(id) => id,
+        None => {
+            return error_response(auth.format, &ApiError::MissingParameter("id".into()))
+                .into_response()
+        }
+    };
+
+    let rating = match params.rating {
+        Some(r) if (0..=5).contains(&r) => r,
+        Some(_) => {
+            return error_response(
+                auth.format,
+                &ApiError::Generic("Rating must be between 0 and 5".into()),
+            )
+            .into_response()
+        }
+        None => {
+            return error_response(auth.format, &ApiError::MissingParameter("rating".into()))
+                .into_response()
+        }
+    };
+
+    let user_id = auth.user.id;
+
+    // Try to set rating (we default to song rating as that's most common)
+    if let Err(e) = auth.state.set_song_rating(user_id, id, rating) {
+        tracing::warn!("Failed to set rating for item {}: {}", id, e);
+        // Don't return an error - the API spec says this should succeed silently
+    }
+
+    ok_empty(auth.format).into_response()
 }

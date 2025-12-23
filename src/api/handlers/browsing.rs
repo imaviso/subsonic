@@ -9,13 +9,14 @@ use crate::api::auth::SubsonicAuth;
 use crate::api::error::ApiError;
 use crate::api::response::{
     error_response, ok_album, ok_album_list2, ok_artist, ok_artists, ok_genres,
-    ok_indexes, ok_music_folders, ok_search_result3, ok_song,
+    ok_indexes, ok_music_folders, ok_random_songs, ok_search_result3, ok_song,
+    ok_songs_by_genre,
 };
 use crate::models::music::{
     AlbumID3Response, AlbumList2Response, AlbumWithSongsID3Response, ArtistID3Response,
     ArtistResponse, ArtistWithAlbumsID3Response, ArtistsID3Response, ChildResponse,
     GenreResponse, GenresResponse, IndexID3Response, IndexResponse, IndexesResponse,
-    MusicFolderResponse, SearchResult3Response,
+    MusicFolderResponse, RandomSongsResponse, SearchResult3Response, SongsByGenreResponse,
 };
 
 /// Query parameters for endpoints that require an ID.
@@ -458,4 +459,116 @@ pub async fn search3(
     };
 
     ok_search_result3(auth.format, response).into_response()
+}
+
+// ============================================================================
+// Random Songs and Songs by Genre endpoints
+// ============================================================================
+
+/// Query parameters for getRandomSongs.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct RandomSongsParams {
+    /// The number of songs to return. Default 10, max 500.
+    pub size: Option<i64>,
+    /// Only returns songs belonging to this genre.
+    pub genre: Option<String>,
+    /// Only return songs published after or in this year.
+    #[serde(rename = "fromYear")]
+    pub from_year: Option<i32>,
+    /// Only return songs published before or in this year.
+    #[serde(rename = "toYear")]
+    pub to_year: Option<i32>,
+    /// Only return songs in this music folder.
+    #[serde(rename = "musicFolderId")]
+    pub music_folder_id: Option<i32>,
+}
+
+/// GET/POST /rest/getRandomSongs[.view]
+///
+/// Returns random songs matching the given criteria.
+pub async fn get_random_songs(
+    axum::extract::Query(params): axum::extract::Query<RandomSongsParams>,
+    auth: SubsonicAuth,
+) -> impl IntoResponse {
+    let size = params.size.unwrap_or(10).min(500).max(1);
+    let user_id = auth.user.id;
+
+    let songs = auth.state.get_random_songs(
+        size,
+        params.genre.as_deref(),
+        params.from_year,
+        params.to_year,
+        params.music_folder_id,
+    );
+
+    let song_responses: Vec<ChildResponse> = songs
+        .iter()
+        .map(|s| {
+            let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
+            ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+        })
+        .collect();
+
+    let response = RandomSongsResponse {
+        songs: song_responses,
+    };
+
+    ok_random_songs(auth.format, response)
+}
+
+/// Query parameters for getSongsByGenre.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct SongsByGenreParams {
+    /// The genre. Required.
+    pub genre: Option<String>,
+    /// The number of songs to return. Default 10, max 500.
+    pub count: Option<i64>,
+    /// The offset. Default 0.
+    pub offset: Option<i64>,
+    /// Only return songs in this music folder.
+    #[serde(rename = "musicFolderId")]
+    pub music_folder_id: Option<i32>,
+}
+
+/// GET/POST /rest/getSongsByGenre[.view]
+///
+/// Returns songs in a given genre.
+pub async fn get_songs_by_genre(
+    axum::extract::Query(params): axum::extract::Query<SongsByGenreParams>,
+    auth: SubsonicAuth,
+) -> impl IntoResponse {
+    let genre = match params.genre.as_deref() {
+        Some(g) => g,
+        None => {
+            return error_response(auth.format, &ApiError::MissingParameter("genre".into()))
+                .into_response()
+        }
+    };
+
+    let count = params.count.unwrap_or(10).min(500).max(1);
+    let offset = params.offset.unwrap_or(0).max(0);
+    let user_id = auth.user.id;
+
+    let songs = auth.state.get_songs_by_genre(
+        genre,
+        count,
+        offset,
+        params.music_folder_id,
+    );
+
+    let song_responses: Vec<ChildResponse> = songs
+        .iter()
+        .map(|s| {
+            let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
+            ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+        })
+        .collect();
+
+    let response = SongsByGenreResponse {
+        songs: song_responses,
+    };
+
+    ok_songs_by_genre(auth.format, response).into_response()
 }

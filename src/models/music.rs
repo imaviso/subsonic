@@ -932,3 +932,105 @@ pub struct NowPlayingResponse {
     #[serde(rename = "entry", skip_serializing_if = "Vec::is_empty")]
     pub entries: Vec<NowPlayingEntryResponse>,
 }
+
+// ============================================================================
+// Response types for getRandomSongs and getSongsByGenre
+// ============================================================================
+
+/// Random songs response for getRandomSongs.
+#[derive(Debug, Serialize, Clone)]
+pub struct RandomSongsResponse {
+    #[serde(rename = "song", skip_serializing_if = "Vec::is_empty")]
+    pub songs: Vec<ChildResponse>,
+}
+
+/// Songs by genre response for getSongsByGenre.
+#[derive(Debug, Serialize, Clone)]
+pub struct SongsByGenreResponse {
+    #[serde(rename = "song", skip_serializing_if = "Vec::is_empty")]
+    pub songs: Vec<ChildResponse>,
+}
+
+// ============================================================================
+// Response types for playlists
+// ============================================================================
+
+/// Playlist response for getPlaylists.
+#[derive(Debug, Serialize, Clone)]
+pub struct PlaylistResponse {
+    #[serde(rename = "@id")]
+    pub id: String,
+    #[serde(rename = "@name")]
+    pub name: String,
+    #[serde(rename = "@comment", skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+    #[serde(rename = "@owner")]
+    pub owner: String,
+    #[serde(rename = "@public")]
+    pub public: bool,
+    #[serde(rename = "@songCount")]
+    pub song_count: i32,
+    #[serde(rename = "@duration")]
+    pub duration: i32,
+    #[serde(rename = "@created")]
+    pub created: String,
+    #[serde(rename = "@changed")]
+    pub changed: String,
+    #[serde(rename = "@coverArt", skip_serializing_if = "Option::is_none")]
+    pub cover_art: Option<String>,
+}
+
+/// Playlists response for getPlaylists.
+#[derive(Debug, Serialize, Clone)]
+pub struct PlaylistsResponse {
+    #[serde(rename = "playlist", skip_serializing_if = "Vec::is_empty")]
+    pub playlists: Vec<PlaylistResponse>,
+}
+
+/// Playlist with songs response for getPlaylist.
+#[derive(Debug, Serialize, Clone)]
+pub struct PlaylistWithSongsResponse {
+    #[serde(rename = "@id")]
+    pub id: String,
+    #[serde(rename = "@name")]
+    pub name: String,
+    #[serde(rename = "@comment", skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+    #[serde(rename = "@owner")]
+    pub owner: String,
+    #[serde(rename = "@public")]
+    pub public: bool,
+    #[serde(rename = "@songCount")]
+    pub song_count: i32,
+    #[serde(rename = "@duration")]
+    pub duration: i32,
+    #[serde(rename = "@created")]
+    pub created: String,
+    #[serde(rename = "@changed")]
+    pub changed: String,
+    #[serde(rename = "@coverArt", skip_serializing_if = "Option::is_none")]
+    pub cover_art: Option<String>,
+    #[serde(rename = "entry", skip_serializing_if = "Vec::is_empty")]
+    pub entries: Vec<ChildResponse>,
+}
+
+// ============================================================================
+// Response types for play queue
+// ============================================================================
+
+/// Play queue response for getPlayQueue.
+#[derive(Debug, Serialize, Clone)]
+pub struct PlayQueueResponse {
+    #[serde(rename = "@current", skip_serializing_if = "Option::is_none")]
+    pub current: Option<String>,
+    #[serde(rename = "@position", skip_serializing_if = "Option::is_none")]
+    pub position: Option<i64>,
+    #[serde(rename = "@username")]
+    pub username: String,
+    #[serde(rename = "@changed")]
+    pub changed: String,
+    #[serde(rename = "@changedBy", skip_serializing_if = "Option::is_none")]
+    pub changed_by: Option<String>,
+    #[serde(rename = "entry", skip_serializing_if = "Vec::is_empty")]
+    pub entries: Vec<ChildResponse>,
+}

@@ -133,6 +133,63 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    user_ratings (id) {
+        id -> Integer,
+        user_id -> Integer,
+        song_id -> Nullable<Integer>,
+        album_id -> Nullable<Integer>,
+        artist_id -> Nullable<Integer>,
+        rating -> Integer,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    playlists (id) {
+        id -> Integer,
+        user_id -> Integer,
+        name -> Text,
+        comment -> Nullable<Text>,
+        public -> Bool,
+        song_count -> Integer,
+        duration -> Integer,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    playlist_songs (id) {
+        id -> Integer,
+        playlist_id -> Integer,
+        song_id -> Integer,
+        position -> Integer,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    play_queue (id) {
+        id -> Integer,
+        user_id -> Integer,
+        current_song_id -> Nullable<Integer>,
+        position -> Nullable<BigInt>,
+        changed_at -> Timestamp,
+        changed_by -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
+    play_queue_songs (id) {
+        id -> Integer,
+        play_queue_id -> Integer,
+        song_id -> Integer,
+        position -> Integer,
+    }
+}
+
 // Define foreign key relationships
 diesel::joinable!(albums -> artists (artist_id));
 diesel::joinable!(songs -> albums (album_id));
@@ -143,6 +200,13 @@ diesel::joinable!(now_playing -> users (user_id));
 diesel::joinable!(now_playing -> songs (song_id));
 diesel::joinable!(scrobbles -> users (user_id));
 diesel::joinable!(scrobbles -> songs (song_id));
+diesel::joinable!(user_ratings -> users (user_id));
+diesel::joinable!(playlists -> users (user_id));
+diesel::joinable!(playlist_songs -> playlists (playlist_id));
+diesel::joinable!(playlist_songs -> songs (song_id));
+diesel::joinable!(play_queue -> users (user_id));
+diesel::joinable!(play_queue_songs -> play_queue (play_queue_id));
+diesel::joinable!(play_queue_songs -> songs (song_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     users,
@@ -153,4 +217,9 @@ diesel::allow_tables_to_appear_in_same_query!(
     starred,
     now_playing,
     scrobbles,
+    user_ratings,
+    playlists,
+    playlist_songs,
+    play_queue,
+    play_queue_songs,
 );

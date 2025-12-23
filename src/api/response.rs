@@ -13,7 +13,8 @@ use super::error::ApiError;
 use crate::models::music::{
     AlbumList2Response, AlbumWithSongsID3Response, ArtistWithAlbumsID3Response, ArtistsID3Response,
     ChildResponse, GenresResponse, IndexesResponse, MusicFolderResponse, NowPlayingResponse,
-    SearchResult3Response, Starred2Response,
+    PlaylistWithSongsResponse, PlaylistsResponse, PlayQueueResponse,
+    RandomSongsResponse, SearchResult3Response, SongsByGenreResponse, Starred2Response,
 };
 
 /// The current Subsonic API version we're compatible with.
@@ -607,6 +608,171 @@ mod xml {
             }
         }
     }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct RandomSongsResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "randomSongs")]
+        pub random_songs: super::RandomSongsResponse,
+    }
+
+    impl RandomSongsResponse {
+        pub fn new(random_songs: super::RandomSongsResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                random_songs,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct SongsByGenreResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "songsByGenre")]
+        pub songs_by_genre: super::SongsByGenreResponse,
+    }
+
+    impl SongsByGenreResponse {
+        pub fn new(songs_by_genre: super::SongsByGenreResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                songs_by_genre,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct PlaylistsResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "playlists")]
+        pub playlists: super::PlaylistsResponse,
+    }
+
+    impl PlaylistsResponse {
+        pub fn new(playlists: super::PlaylistsResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                playlists,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct PlaylistResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "playlist")]
+        pub playlist: super::PlaylistWithSongsResponse,
+    }
+
+    impl PlaylistResponse {
+        pub fn new(playlist: super::PlaylistWithSongsResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                playlist,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
+    pub struct PlayQueueResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "playQueue")]
+        pub play_queue: super::PlayQueueResponse,
+    }
+
+    impl PlayQueueResponse {
+        pub fn new(play_queue: super::PlayQueueResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                play_queue,
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -653,6 +819,16 @@ mod json {
         pub starred2: Option<super::Starred2Response>,
         #[serde(skip_serializing_if = "Option::is_none", rename = "nowPlaying")]
         pub now_playing: Option<super::NowPlayingResponse>,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "randomSongs")]
+        pub random_songs: Option<super::RandomSongsResponse>,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "songsByGenre")]
+        pub songs_by_genre: Option<super::SongsByGenreResponse>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub playlists: Option<super::PlaylistsResponse>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub playlist: Option<super::PlaylistWithSongsResponse>,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "playQueue")]
+        pub play_queue: Option<super::PlayQueueResponse>,
     }
 
     #[derive(Debug, Serialize)]
@@ -700,6 +876,11 @@ mod json {
                 search_result3: None,
                 starred2: None,
                 now_playing: None,
+                random_songs: None,
+                songs_by_genre: None,
+                playlists: None,
+                playlist: None,
+                play_queue: None,
             }
         }
 
@@ -724,6 +905,11 @@ mod json {
                 search_result3: None,
                 starred2: None,
                 now_playing: None,
+                random_songs: None,
+                songs_by_genre: None,
+                playlists: None,
+                playlist: None,
+                play_queue: None,
             }
         }
 
@@ -792,6 +978,31 @@ mod json {
             self
         }
 
+        pub fn with_random_songs(mut self, random_songs: super::RandomSongsResponse) -> Self {
+            self.random_songs = Some(random_songs);
+            self
+        }
+
+        pub fn with_songs_by_genre(mut self, songs_by_genre: super::SongsByGenreResponse) -> Self {
+            self.songs_by_genre = Some(songs_by_genre);
+            self
+        }
+
+        pub fn with_playlists(mut self, playlists: super::PlaylistsResponse) -> Self {
+            self.playlists = Some(playlists);
+            self
+        }
+
+        pub fn with_playlist(mut self, playlist: super::PlaylistWithSongsResponse) -> Self {
+            self.playlist = Some(playlist);
+            self
+        }
+
+        pub fn with_play_queue(mut self, play_queue: super::PlayQueueResponse) -> Self {
+            self.play_queue = Some(play_queue);
+            self
+        }
+
         pub fn wrap(self) -> JsonWrapper {
             JsonWrapper {
                 subsonic_response: self,
@@ -826,6 +1037,11 @@ enum ResponseKind {
     SearchResult3(SearchResult3Response),
     Starred2(Starred2Response),
     NowPlaying(NowPlayingResponse),
+    RandomSongs(RandomSongsResponse),
+    SongsByGenre(SongsByGenreResponse),
+    Playlists(PlaylistsResponse),
+    Playlist(PlaylistWithSongsResponse),
+    PlayQueue(PlayQueueResponse),
 }
 
 impl SubsonicResponse {
@@ -936,6 +1152,41 @@ impl SubsonicResponse {
             kind: ResponseKind::NowPlaying(now_playing),
         }
     }
+
+    pub fn random_songs(format: Format, random_songs: RandomSongsResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::RandomSongs(random_songs),
+        }
+    }
+
+    pub fn songs_by_genre(format: Format, songs_by_genre: SongsByGenreResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::SongsByGenre(songs_by_genre),
+        }
+    }
+
+    pub fn playlists(format: Format, playlists: PlaylistsResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::Playlists(playlists),
+        }
+    }
+
+    pub fn playlist(format: Format, playlist: PlaylistWithSongsResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::Playlist(playlist),
+        }
+    }
+
+    pub fn play_queue(format: Format, play_queue: PlayQueueResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::PlayQueue(play_queue),
+        }
+    }
 }
 
 impl IntoResponse for SubsonicResponse {
@@ -997,6 +1248,21 @@ impl SubsonicResponse {
             }
             ResponseKind::NowPlaying(now_playing) => {
                 quick_xml::se::to_string(&xml::NowPlayingResponse::new(now_playing))
+            }
+            ResponseKind::RandomSongs(random_songs) => {
+                quick_xml::se::to_string(&xml::RandomSongsResponse::new(random_songs))
+            }
+            ResponseKind::SongsByGenre(songs_by_genre) => {
+                quick_xml::se::to_string(&xml::SongsByGenreResponse::new(songs_by_genre))
+            }
+            ResponseKind::Playlists(playlists) => {
+                quick_xml::se::to_string(&xml::PlaylistsResponse::new(playlists))
+            }
+            ResponseKind::Playlist(playlist) => {
+                quick_xml::se::to_string(&xml::PlaylistResponse::new(playlist))
+            }
+            ResponseKind::PlayQueue(play_queue) => {
+                quick_xml::se::to_string(&xml::PlayQueueResponse::new(play_queue))
             }
         };
 
@@ -1060,6 +1326,21 @@ impl SubsonicResponse {
             }
             ResponseKind::NowPlaying(now_playing) => {
                 json::SubsonicResponse::ok().with_now_playing(now_playing).wrap()
+            }
+            ResponseKind::RandomSongs(random_songs) => {
+                json::SubsonicResponse::ok().with_random_songs(random_songs).wrap()
+            }
+            ResponseKind::SongsByGenre(songs_by_genre) => {
+                json::SubsonicResponse::ok().with_songs_by_genre(songs_by_genre).wrap()
+            }
+            ResponseKind::Playlists(playlists) => {
+                json::SubsonicResponse::ok().with_playlists(playlists).wrap()
+            }
+            ResponseKind::Playlist(playlist) => {
+                json::SubsonicResponse::ok().with_playlist(playlist).wrap()
+            }
+            ResponseKind::PlayQueue(play_queue) => {
+                json::SubsonicResponse::ok().with_play_queue(play_queue).wrap()
             }
         };
 
@@ -1198,4 +1479,29 @@ pub fn ok_starred2(format: Format, starred2: Starred2Response) -> SubsonicRespon
 /// Helper function to create a now playing response.
 pub fn ok_now_playing(format: Format, now_playing: NowPlayingResponse) -> SubsonicResponse {
     SubsonicResponse::now_playing(format, now_playing)
+}
+
+/// Helper function to create a random songs response.
+pub fn ok_random_songs(format: Format, random_songs: RandomSongsResponse) -> SubsonicResponse {
+    SubsonicResponse::random_songs(format, random_songs)
+}
+
+/// Helper function to create a songs by genre response.
+pub fn ok_songs_by_genre(format: Format, songs_by_genre: SongsByGenreResponse) -> SubsonicResponse {
+    SubsonicResponse::songs_by_genre(format, songs_by_genre)
+}
+
+/// Helper function to create a playlists response.
+pub fn ok_playlists(format: Format, playlists: PlaylistsResponse) -> SubsonicResponse {
+    SubsonicResponse::playlists(format, playlists)
+}
+
+/// Helper function to create a playlist with songs response.
+pub fn ok_playlist(format: Format, playlist: PlaylistWithSongsResponse) -> SubsonicResponse {
+    SubsonicResponse::playlist(format, playlist)
+}
+
+/// Helper function to create a play queue response.
+pub fn ok_play_queue(format: Format, play_queue: PlayQueueResponse) -> SubsonicResponse {
+    SubsonicResponse::play_queue(format, play_queue)
 }

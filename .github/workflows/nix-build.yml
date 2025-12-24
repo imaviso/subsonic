@@ -24,7 +24,7 @@ jobs:
         run: nix build
 
       - name: Run tests
-        run: nix build .#checks.x86_64-linux.default || cargo test --manifest-path $(nix flake show --json | jq -r '.packages.x86_64-linux.default.drvPath' 2>/dev/null || echo 'Cargo.toml')
+        run: nix develop --command cargo test
 
       - name: Run clippy
         run: nix develop --command cargo clippy --all-targets -- -D warnings

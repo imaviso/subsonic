@@ -7,6 +7,7 @@ use axum::{
     Router,
 };
 use clap::{Parser, Subcommand};
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -214,6 +215,10 @@ fn create_router(state: AppState) -> Router {
 
     Router::new()
         .nest("/rest", rest_routes)
+        .layer(CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }

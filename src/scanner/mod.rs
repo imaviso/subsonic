@@ -309,16 +309,6 @@ impl Scanner {
         self.scan_folder_with_options(&folder, None, mode)
     }
 
-    /// Scan a single music folder (full scan).
-    fn scan_folder(&self, folder: &MusicFolder) -> Result<ScanResult, ScanError> {
-        self.scan_folder_with_options(folder, None, ScanMode::Full)
-    }
-
-    /// Scan a single music folder with optional progress tracking.
-    fn scan_folder_with_state(&self, folder: &MusicFolder, state: Option<Arc<ScanState>>) -> Result<ScanResult, ScanError> {
-        self.scan_folder_with_options(folder, state, ScanMode::Full)
-    }
-
     /// Scan a single music folder with optional progress tracking and scan mode.
     fn scan_folder_with_options(&self, folder: &MusicFolder, state: Option<Arc<ScanState>>, mode: ScanMode) -> Result<ScanResult, ScanError> {
         let mut result = ScanResult::default();
@@ -416,16 +406,6 @@ impl Scanner {
         .map_err(MusicRepoError::Database)?;
 
         Ok(())
-    }
-
-    /// Discover all audio files in a directory.
-    fn discover_tracks(
-        &self,
-        folder_path: &Path,
-        folder: &MusicFolder,
-    ) -> Result<Vec<ScannedTrack>, ScanError> {
-        let (tracks, _) = self.discover_tracks_with_paths(folder_path, folder)?;
-        Ok(tracks)
     }
 
     /// Discover all audio files in a directory, also returning the set of discovered paths.
@@ -595,25 +575,6 @@ impl Scanner {
             cover_art_mime,
             file_modified_at,
         })
-    }
-
-    /// Process scanned tracks and populate the database.
-    fn process_tracks(
-        &self,
-        folder: &MusicFolder,
-        tracks: Vec<ScannedTrack>,
-    ) -> Result<(usize, usize, usize, usize, usize, usize, usize), ScanError> {
-        self.process_tracks_with_options(folder, tracks, &HashMap::new(), None, ScanMode::Full)
-    }
-
-    /// Process scanned tracks and populate the database with optional progress tracking.
-    fn process_tracks_with_state(
-        &self,
-        folder: &MusicFolder,
-        tracks: Vec<ScannedTrack>,
-        state: Option<Arc<ScanState>>,
-    ) -> Result<(usize, usize, usize, usize, usize, usize, usize), ScanError> {
-        self.process_tracks_with_options(folder, tracks, &HashMap::new(), state, ScanMode::Full)
     }
 
     /// Process scanned tracks and populate the database with options.

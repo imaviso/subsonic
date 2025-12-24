@@ -17,15 +17,15 @@ use crate::models::music::{
 fn parse_repeated_param(query: &str, param_name: &str) -> Vec<String> {
     let mut values = Vec::new();
     for part in query.split('&') {
-        if let Some((key, value)) = part.split_once('=') {
-            if key == param_name {
-                // URL decode the value
-                if let Ok(decoded) = urlencoding::decode(value) {
-                    values.push(decoded.into_owned());
-                } else {
-                    values.push(value.to_string());
-                }
-            }
+        if let Some((key, value)) = part.split_once('=')
+            && key == param_name
+        {
+            // URL decode the value
+            values.push(
+                urlencoding::decode(value)
+                    .map(|d| d.into_owned())
+                    .unwrap_or_else(|_| value.to_string()),
+            );
         }
     }
     values
@@ -35,13 +35,10 @@ fn parse_repeated_param(query: &str, param_name: &str) -> Vec<String> {
 ///
 /// Stars one or more artists, albums, or songs.
 /// Supports multiple IDs via repeated parameters: `?id=1&id=2&albumId=3`
-pub async fn star(
-    RawQuery(query): RawQuery,
-    auth: SubsonicAuth,
-) -> impl IntoResponse {
+pub async fn star(RawQuery(query): RawQuery, auth: SubsonicAuth) -> impl IntoResponse {
     let query = query.unwrap_or_default();
     let user_id = auth.user.id;
-    
+
     // Parse repeated parameters
     let song_ids = parse_repeated_param(&query, "id");
     let album_ids = parse_repeated_param(&query, "albumId");
@@ -49,28 +46,28 @@ pub async fn star(
 
     // Star artists
     for artist_id_str in &artist_ids {
-        if let Ok(artist_id) = artist_id_str.parse::<i32>() {
-            if let Err(e) = auth.state.star_artist(user_id, artist_id) {
-                tracing::warn!("Failed to star artist {}: {}", artist_id, e);
-            }
+        if let Ok(artist_id) = artist_id_str.parse::<i32>()
+            && let Err(e) = auth.state.star_artist(user_id, artist_id)
+        {
+            tracing::warn!("Failed to star artist {}: {}", artist_id, e);
         }
     }
 
     // Star albums
     for album_id_str in &album_ids {
-        if let Ok(album_id) = album_id_str.parse::<i32>() {
-            if let Err(e) = auth.state.star_album(user_id, album_id) {
-                tracing::warn!("Failed to star album {}: {}", album_id, e);
-            }
+        if let Ok(album_id) = album_id_str.parse::<i32>()
+            && let Err(e) = auth.state.star_album(user_id, album_id)
+        {
+            tracing::warn!("Failed to star album {}: {}", album_id, e);
         }
     }
 
     // Star songs (id parameter)
     for song_id_str in &song_ids {
-        if let Ok(song_id) = song_id_str.parse::<i32>() {
-            if let Err(e) = auth.state.star_song(user_id, song_id) {
-                tracing::warn!("Failed to star song {}: {}", song_id, e);
-            }
+        if let Ok(song_id) = song_id_str.parse::<i32>()
+            && let Err(e) = auth.state.star_song(user_id, song_id)
+        {
+            tracing::warn!("Failed to star song {}: {}", song_id, e);
         }
     }
 
@@ -81,13 +78,10 @@ pub async fn star(
 ///
 /// Unstars one or more artists, albums, or songs.
 /// Supports multiple IDs via repeated parameters: `?id=1&id=2&albumId=3`
-pub async fn unstar(
-    RawQuery(query): RawQuery,
-    auth: SubsonicAuth,
-) -> impl IntoResponse {
+pub async fn unstar(RawQuery(query): RawQuery, auth: SubsonicAuth) -> impl IntoResponse {
     let query = query.unwrap_or_default();
     let user_id = auth.user.id;
-    
+
     // Parse repeated parameters
     let song_ids = parse_repeated_param(&query, "id");
     let album_ids = parse_repeated_param(&query, "albumId");
@@ -95,28 +89,28 @@ pub async fn unstar(
 
     // Unstar artists
     for artist_id_str in &artist_ids {
-        if let Ok(artist_id) = artist_id_str.parse::<i32>() {
-            if let Err(e) = auth.state.unstar_artist(user_id, artist_id) {
-                tracing::warn!("Failed to unstar artist {}: {}", artist_id, e);
-            }
+        if let Ok(artist_id) = artist_id_str.parse::<i32>()
+            && let Err(e) = auth.state.unstar_artist(user_id, artist_id)
+        {
+            tracing::warn!("Failed to unstar artist {}: {}", artist_id, e);
         }
     }
 
     // Unstar albums
     for album_id_str in &album_ids {
-        if let Ok(album_id) = album_id_str.parse::<i32>() {
-            if let Err(e) = auth.state.unstar_album(user_id, album_id) {
-                tracing::warn!("Failed to unstar album {}: {}", album_id, e);
-            }
+        if let Ok(album_id) = album_id_str.parse::<i32>()
+            && let Err(e) = auth.state.unstar_album(user_id, album_id)
+        {
+            tracing::warn!("Failed to unstar album {}: {}", album_id, e);
         }
     }
 
     // Unstar songs (id parameter)
     for song_id_str in &song_ids {
-        if let Ok(song_id) = song_id_str.parse::<i32>() {
-            if let Err(e) = auth.state.unstar_song(user_id, song_id) {
-                tracing::warn!("Failed to unstar song {}: {}", song_id, e);
-            }
+        if let Ok(song_id) = song_id_str.parse::<i32>()
+            && let Err(e) = auth.state.unstar_song(user_id, song_id)
+        {
+            tracing::warn!("Failed to unstar song {}: {}", song_id, e);
         }
     }
 
@@ -144,7 +138,9 @@ pub async fn get_starred2(auth: SubsonicAuth) -> impl IntoResponse {
     let starred_albums = auth.state.get_starred_albums(user_id);
     let albums: Vec<StarredAlbumID3Response> = starred_albums
         .iter()
-        .map(|(album, starred_at)| StarredAlbumID3Response::from_album_and_starred(album, starred_at))
+        .map(|(album, starred_at)| {
+            StarredAlbumID3Response::from_album_and_starred(album, starred_at)
+        })
         .collect();
 
     // Get starred songs
@@ -167,22 +163,19 @@ pub async fn get_starred2(auth: SubsonicAuth) -> impl IntoResponse {
 ///
 /// Registers the local playback of one or more media files.
 /// Typically used to notify the server about what is currently being played locally.
-/// 
+///
 /// Parameters:
 /// - `id` (required): The ID of the song being played (can be repeated)
 /// - `time` (optional): Time in milliseconds since the media started playing (can be repeated, one per id)
 /// - `submission` (optional): Whether this is a "scrobble" (true) or a "now playing" notification (false). Default true.
-pub async fn scrobble(
-    RawQuery(query): RawQuery,
-    auth: SubsonicAuth,
-) -> impl IntoResponse {
+pub async fn scrobble(RawQuery(query): RawQuery, auth: SubsonicAuth) -> impl IntoResponse {
     let query = query.unwrap_or_default();
     let user_id = auth.user.id;
-    
+
     // Parse parameters
     let song_ids = parse_repeated_param(&query, "id");
     let times = parse_repeated_param(&query, "time");
-    
+
     // Parse submission parameter (default is true)
     let submission = parse_repeated_param(&query, "submission")
         .first()
@@ -201,17 +194,15 @@ pub async fn scrobble(
         if let Ok(song_id) = song_id_str.parse::<i32>() {
             // Get the corresponding time if provided
             let time = times.get(i).and_then(|t| t.parse::<i64>().ok());
-            
+
             // Register the scrobble
             if let Err(e) = auth.state.scrobble(user_id, song_id, time, submission) {
                 tracing::warn!("Failed to scrobble song {}: {}", song_id, e);
             }
-            
+
             // If this is a "now playing" notification (submission=false), also update now playing
-            if !submission {
-                if let Err(e) = auth.state.set_now_playing(user_id, song_id, player_id) {
-                    tracing::warn!("Failed to set now playing for song {}: {}", song_id, e);
-                }
+            if !submission && let Err(e) = auth.state.set_now_playing(user_id, song_id, player_id) {
+                tracing::warn!("Failed to set now playing for song {}: {}", song_id, e);
             }
         }
     }
@@ -224,7 +215,7 @@ pub async fn scrobble(
 /// Returns what is currently being played by all users.
 pub async fn get_now_playing(auth: SubsonicAuth) -> impl IntoResponse {
     let entries = auth.state.get_now_playing();
-    
+
     let entry_responses: Vec<NowPlayingEntryResponse> = entries
         .iter()
         .map(|entry| {
@@ -261,7 +252,7 @@ pub struct SetRatingParams {
 /// GET/POST /rest/setRating[.view]
 ///
 /// Sets the rating for a music file (song).
-/// 
+///
 /// Parameters:
 /// - `id` (required): The ID of the item to rate
 /// - `rating` (required): The rating (0-5). 0 removes the rating.
@@ -274,7 +265,7 @@ pub async fn set_rating(
         Some(id) => id,
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("id".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -285,11 +276,11 @@ pub async fn set_rating(
                 auth.format,
                 &ApiError::Generic("Rating must be between 0 and 5".into()),
             )
-            .into_response()
+            .into_response();
         }
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("rating".into()))
-                .into_response()
+                .into_response();
         }
     };
 

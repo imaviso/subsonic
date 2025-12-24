@@ -14,16 +14,16 @@ use crate::scanner::Scanner;
 /// Returns: scanStatus with scanning=true/false and count of items scanned.
 pub async fn start_scan(auth: SubsonicAuth) -> impl IntoResponse {
     let scan_state = auth.state.get_scan_state();
-    
+
     // Try to start a new scan - returns false if one is already running
     if scan_state.try_start() {
         // Reset the counter for this new scan
         scan_state.reset_count();
-        
+
         let pool = auth.state.get_db_pool();
         let scan_state_for_scanner = scan_state.clone();
         let scan_state_for_finish = scan_state.clone();
-        
+
         // Spawn background task to run the scan
         tokio::spawn(async move {
             // Run the scan in a blocking task since it's CPU-intensive
@@ -32,10 +32,10 @@ pub async fn start_scan(auth: SubsonicAuth) -> impl IntoResponse {
                 scanner.scan_all_with_state(Some(scan_state_for_scanner))
             })
             .await;
-            
+
             // Mark scan as complete
             scan_state_for_finish.finish();
-            
+
             match result {
                 Ok(Ok(stats)) => {
                     tracing::info!(
@@ -54,9 +54,13 @@ pub async fn start_scan(auth: SubsonicAuth) -> impl IntoResponse {
             }
         });
     }
-    
+
     // Return current status (scanning should be true now)
-    ok_scan_status(auth.format, scan_state.is_scanning(), scan_state.get_count())
+    ok_scan_status(
+        auth.format,
+        scan_state.is_scanning(),
+        scan_state.get_count(),
+    )
 }
 
 /// GET/POST /rest/getScanStatus[.view]
@@ -66,5 +70,9 @@ pub async fn start_scan(auth: SubsonicAuth) -> impl IntoResponse {
 /// Returns: scanStatus with scanning=true/false and count of items scanned.
 pub async fn get_scan_status(auth: SubsonicAuth) -> impl IntoResponse {
     let scan_state = auth.state.get_scan_state();
-    ok_scan_status(auth.format, scan_state.is_scanning(), scan_state.get_count())
+    ok_scan_status(
+        auth.format,
+        scan_state.is_scanning(),
+        scan_state.get_count(),
+    )
 }

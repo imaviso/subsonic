@@ -27,10 +27,7 @@ pub async fn get_user(
     let username = match &params.username {
         Some(u) => u.as_str(),
         None => {
-            return error_response(
-                auth.format,
-                &ApiError::MissingParameter("username".into()),
-            );
+            return error_response(auth.format, &ApiError::MissingParameter("username".into()));
         }
     };
 
@@ -90,10 +87,7 @@ pub async fn delete_user(
     let username = match &params.username {
         Some(u) => u.as_str(),
         None => {
-            return error_response(
-                auth.format,
-                &ApiError::MissingParameter("username".into()),
-            );
+            return error_response(auth.format, &ApiError::MissingParameter("username".into()));
         }
     };
 
@@ -134,20 +128,14 @@ pub async fn change_password(
     let username = match &params.username {
         Some(u) => u.as_str(),
         None => {
-            return error_response(
-                auth.format,
-                &ApiError::MissingParameter("username".into()),
-            );
+            return error_response(auth.format, &ApiError::MissingParameter("username".into()));
         }
     };
 
     let password = match &params.password {
         Some(p) => p.as_str(),
         None => {
-            return error_response(
-                auth.format,
-                &ApiError::MissingParameter("password".into()),
-            );
+            return error_response(auth.format, &ApiError::MissingParameter("password".into()));
         }
     };
 
@@ -216,30 +204,21 @@ pub async fn create_user(
     let username = match &params.username {
         Some(u) => u.as_str(),
         None => {
-            return error_response(
-                auth.format,
-                &ApiError::MissingParameter("username".into()),
-            );
+            return error_response(auth.format, &ApiError::MissingParameter("username".into()));
         }
     };
 
     let password = match &params.password {
         Some(p) => p.as_str(),
         None => {
-            return error_response(
-                auth.format,
-                &ApiError::MissingParameter("password".into()),
-            );
+            return error_response(auth.format, &ApiError::MissingParameter("password".into()));
         }
     };
 
     let email = match &params.email {
         Some(e) => e.as_str(),
         None => {
-            return error_response(
-                auth.format,
-                &ApiError::MissingParameter("email".into()),
-            );
+            return error_response(auth.format, &ApiError::MissingParameter("email".into()));
         }
     };
 
@@ -335,15 +314,15 @@ pub async fn update_user(
     let username = match &params.username {
         Some(u) => u.as_str(),
         None => {
-            return error_response(
-                auth.format,
-                &ApiError::MissingParameter("username".into()),
-            );
+            return error_response(auth.format, &ApiError::MissingParameter("username".into()));
         }
     };
 
     // Decode password if provided and hex-encoded
-    let decoded_password = params.password.as_ref().map(|p| AuthParams::decode_password(p));
+    let decoded_password = params
+        .password
+        .as_ref()
+        .map(|p| AuthParams::decode_password(p));
 
     match auth.state.update_user(
         username,

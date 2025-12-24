@@ -8,5 +8,5 @@ pub mod router;
 
 pub use auth::{AuthState, DatabaseAuthState, SubsonicAuth};
 pub use error::ApiError;
-pub use response::{ok_empty, ok_license, Format};
+pub use response::{Format, ok_empty, ok_license};
 pub use router::SubsonicRouterExt;

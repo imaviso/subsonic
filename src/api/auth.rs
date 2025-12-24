@@ -24,20 +24,25 @@
 use std::sync::Arc;
 
 use axum::{
+    Form,
     body::Body,
     extract::{FromRef, FromRequest, Query, Request},
     http::Method,
     response::{IntoResponse, Response},
-    Form,
 };
 use serde::Deserialize;
 
 use super::error::ApiError;
-use super::response::{error_response, Format};
+use super::response::{Format, error_response};
 use crate::crypto::hash_password;
-use crate::db::{DbPool, UserRepository, MusicFolderRepository, ArtistRepository, SongRepository, AlbumRepository, StarredRepository, NowPlayingRepository, ScrobbleRepository, NowPlayingEntry, RatingRepository, PlaylistRepository, PlayQueueRepository, Playlist, PlayQueue, NewUser, UserUpdate};
+use crate::db::{
+    AlbumRepository, ArtistRepository, DbPool, MusicFolderRepository, NewUser, NowPlayingEntry,
+    NowPlayingRepository, PlayQueue, PlayQueueRepository, Playlist, PlaylistRepository,
+    RatingRepository, ScrobbleRepository, SongRepository, StarredRepository, UserRepository,
+    UserUpdate,
+};
 use crate::models::User;
-use crate::models::music::{MusicFolder, Artist, Song, Album};
+use crate::models::music::{Album, Artist, MusicFolder, Song};
 use crate::scanner::ScanState;
 use chrono::NaiveDateTime;
 
@@ -80,7 +85,13 @@ pub trait AuthState: Send + Sync + 'static {
     /// Get random albums.
     fn get_albums_random(&self, limit: i64) -> Vec<Album>;
     /// Get albums by year range.
-    fn get_albums_by_year(&self, from_year: i32, to_year: i32, offset: i64, limit: i64) -> Vec<Album>;
+    fn get_albums_by_year(
+        &self,
+        from_year: i32,
+        to_year: i32,
+        offset: i64,
+        limit: i64,
+    ) -> Vec<Album>;
     /// Get albums by genre.
     fn get_albums_by_genre(&self, genre: &str, offset: i64, limit: i64) -> Vec<Album>;
     /// Get starred albums for a user with pagination.
@@ -128,9 +139,20 @@ pub trait AuthState: Send + Sync + 'static {
 
     // Scrobble/now playing methods
     /// Record a scrobble (song play).
-    fn scrobble(&self, user_id: i32, song_id: i32, time: Option<i64>, submission: bool) -> Result<(), String>;
+    fn scrobble(
+        &self,
+        user_id: i32,
+        song_id: i32,
+        time: Option<i64>,
+        submission: bool,
+    ) -> Result<(), String>;
     /// Set a song as now playing for a user.
-    fn set_now_playing(&self, user_id: i32, song_id: i32, player_id: Option<&str>) -> Result<(), String>;
+    fn set_now_playing(
+        &self,
+        user_id: i32,
+        song_id: i32,
+        player_id: Option<&str>,
+    ) -> Result<(), String>;
     /// Get all currently playing songs.
     fn get_now_playing(&self) -> Vec<NowPlayingEntry>;
 
@@ -154,7 +176,12 @@ pub trait AuthState: Send + Sync + 'static {
     ) -> Vec<Song>;
 
     /// Get similar songs by artist (random songs from the same artist, excluding a specific song).
-    fn get_similar_songs_by_artist(&self, artist_id: i32, exclude_song_id: i32, limit: i64) -> Vec<Song>;
+    fn get_similar_songs_by_artist(
+        &self,
+        artist_id: i32,
+        exclude_song_id: i32,
+        limit: i64,
+    ) -> Vec<Song>;
 
     /// Get top songs by artist name (ordered by play count).
     fn get_top_songs_by_artist_name(&self, artist_name: &str, limit: i64) -> Vec<Song>;
@@ -179,7 +206,13 @@ pub trait AuthState: Send + Sync + 'static {
     /// Get songs in a playlist.
     fn get_playlist_songs(&self, playlist_id: i32) -> Vec<Song>;
     /// Create a new playlist.
-    fn create_playlist(&self, user_id: i32, name: &str, comment: Option<&str>, song_ids: &[i32]) -> Result<Playlist, String>;
+    fn create_playlist(
+        &self,
+        user_id: i32,
+        name: &str,
+        comment: Option<&str>,
+        song_ids: &[i32],
+    ) -> Result<Playlist, String>;
     /// Update a playlist.
     fn update_playlist(
         &self,
@@ -218,6 +251,7 @@ pub trait AuthState: Send + Sync + 'static {
     /// Change a user's password.
     fn change_password(&self, username: &str, new_password: &str) -> Result<(), String>;
     /// Create a new user.
+    #[allow(clippy::too_many_arguments)]
     fn create_user(
         &self,
         username: &str,
@@ -237,6 +271,7 @@ pub trait AuthState: Send + Sync + 'static {
         video_conversion_role: bool,
     ) -> Result<User, String>;
     /// Update an existing user.
+    #[allow(clippy::too_many_arguments)]
     fn update_user(
         &self,
         username: &str,
@@ -399,7 +434,7 @@ where
 
     async fn from_request(req: Request<Body>, state: &S) -> Result<Self, Self::Rejection> {
         let is_post = req.method() == Method::POST;
-        
+
         // Extract query parameters first (they exist in both GET and POST)
         let (parts, body) = req.into_parts();
         let query_params = Query::<AuthParams>::try_from_uri(&parts.uri)
@@ -493,7 +528,8 @@ where
             } else {
                 return Err(AuthError {
                     error: ApiError::MissingParameter(
-                        "authentication: 'apiKey', 'p' (password), or 't' and 's' (token and salt)".into(),
+                        "authentication: 'apiKey', 'p' (password), or 't' and 's' (token and salt)"
+                            .into(),
                     ),
                     format,
                 });
@@ -609,39 +645,61 @@ impl AuthState for DatabaseAuthState {
     }
 
     fn get_albums_by_artist(&self, artist_id: i32) -> Vec<Album> {
-        self.album_repo.find_by_artist(artist_id).unwrap_or_default()
+        self.album_repo
+            .find_by_artist(artist_id)
+            .unwrap_or_default()
     }
 
     fn get_albums_alphabetical_by_name(&self, offset: i64, limit: i64) -> Vec<Album> {
-        self.album_repo.find_alphabetical_by_name(offset, limit).unwrap_or_default()
+        self.album_repo
+            .find_alphabetical_by_name(offset, limit)
+            .unwrap_or_default()
     }
 
     fn get_albums_alphabetical_by_artist(&self, offset: i64, limit: i64) -> Vec<Album> {
-        self.album_repo.find_alphabetical_by_artist(offset, limit).unwrap_or_default()
+        self.album_repo
+            .find_alphabetical_by_artist(offset, limit)
+            .unwrap_or_default()
     }
 
     fn get_albums_newest(&self, offset: i64, limit: i64) -> Vec<Album> {
-        self.album_repo.find_newest(offset, limit).unwrap_or_default()
+        self.album_repo
+            .find_newest(offset, limit)
+            .unwrap_or_default()
     }
 
     fn get_albums_frequent(&self, offset: i64, limit: i64) -> Vec<Album> {
-        self.album_repo.find_frequent(offset, limit).unwrap_or_default()
+        self.album_repo
+            .find_frequent(offset, limit)
+            .unwrap_or_default()
     }
 
     fn get_albums_recent(&self, offset: i64, limit: i64) -> Vec<Album> {
-        self.album_repo.find_recent(offset, limit).unwrap_or_default()
+        self.album_repo
+            .find_recent(offset, limit)
+            .unwrap_or_default()
     }
 
     fn get_albums_random(&self, limit: i64) -> Vec<Album> {
         self.album_repo.find_random(limit).unwrap_or_default()
     }
 
-    fn get_albums_by_year(&self, from_year: i32, to_year: i32, offset: i64, limit: i64) -> Vec<Album> {
-        self.album_repo.find_by_year_range(from_year, to_year, offset, limit).unwrap_or_default()
+    fn get_albums_by_year(
+        &self,
+        from_year: i32,
+        to_year: i32,
+        offset: i64,
+        limit: i64,
+    ) -> Vec<Album> {
+        self.album_repo
+            .find_by_year_range(from_year, to_year, offset, limit)
+            .unwrap_or_default()
     }
 
     fn get_albums_by_genre(&self, genre: &str, offset: i64, limit: i64) -> Vec<Album> {
-        self.album_repo.find_by_genre(genre, offset, limit).unwrap_or_default()
+        self.album_repo
+            .find_by_genre(genre, offset, limit)
+            .unwrap_or_default()
     }
 
     fn get_albums_starred(&self, user_id: i32, offset: i64, limit: i64) -> Vec<Album> {
@@ -655,21 +713,22 @@ impl AuthState for DatabaseAuthState {
 
     fn get_albums_highest(&self, user_id: i32, offset: i64, limit: i64) -> Vec<Album> {
         // Get highest rated album IDs
-        let album_ids = self.rating_repo
+        let album_ids = self
+            .rating_repo
             .get_highest_rated_album_ids(user_id, offset, limit)
             .unwrap_or_default();
-        
+
         if album_ids.is_empty() {
             return vec![];
         }
-        
+
         // Fetch albums and maintain order
         let albums = self.album_repo.find_by_ids(&album_ids).unwrap_or_default();
-        
+
         // Re-order albums to match the rating order
-        let mut album_map: std::collections::HashMap<i32, Album> = 
+        let mut album_map: std::collections::HashMap<i32, Album> =
             albums.into_iter().map(|a| (a.id, a)).collect();
-        
+
         album_ids
             .into_iter()
             .filter_map(|id| album_map.remove(&id))
@@ -681,75 +740,128 @@ impl AuthState for DatabaseAuthState {
     }
 
     fn search_artists(&self, query: &str, offset: i64, limit: i64) -> Vec<Artist> {
-        self.artist_repo.search(query, offset, limit).unwrap_or_default()
+        self.artist_repo
+            .search(query, offset, limit)
+            .unwrap_or_default()
     }
 
     fn search_albums(&self, query: &str, offset: i64, limit: i64) -> Vec<Album> {
-        self.album_repo.search(query, offset, limit).unwrap_or_default()
+        self.album_repo
+            .search(query, offset, limit)
+            .unwrap_or_default()
     }
 
     fn search_songs(&self, query: &str, offset: i64, limit: i64) -> Vec<Song> {
-        self.song_repo.search(query, offset, limit).unwrap_or_default()
+        self.song_repo
+            .search(query, offset, limit)
+            .unwrap_or_default()
     }
 
     fn star_artist(&self, user_id: i32, artist_id: i32) -> Result<(), String> {
-        self.starred_repo.star_artist(user_id, artist_id).map_err(|e| e.to_string())
+        self.starred_repo
+            .star_artist(user_id, artist_id)
+            .map_err(|e| e.to_string())
     }
 
     fn star_album(&self, user_id: i32, album_id: i32) -> Result<(), String> {
-        self.starred_repo.star_album(user_id, album_id).map_err(|e| e.to_string())
+        self.starred_repo
+            .star_album(user_id, album_id)
+            .map_err(|e| e.to_string())
     }
 
     fn star_song(&self, user_id: i32, song_id: i32) -> Result<(), String> {
-        self.starred_repo.star_song(user_id, song_id).map_err(|e| e.to_string())
+        self.starred_repo
+            .star_song(user_id, song_id)
+            .map_err(|e| e.to_string())
     }
 
     fn unstar_artist(&self, user_id: i32, artist_id: i32) -> Result<(), String> {
-        self.starred_repo.unstar_artist(user_id, artist_id).map(|_| ()).map_err(|e| e.to_string())
+        self.starred_repo
+            .unstar_artist(user_id, artist_id)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
     }
 
     fn unstar_album(&self, user_id: i32, album_id: i32) -> Result<(), String> {
-        self.starred_repo.unstar_album(user_id, album_id).map(|_| ()).map_err(|e| e.to_string())
+        self.starred_repo
+            .unstar_album(user_id, album_id)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
     }
 
     fn unstar_song(&self, user_id: i32, song_id: i32) -> Result<(), String> {
-        self.starred_repo.unstar_song(user_id, song_id).map(|_| ()).map_err(|e| e.to_string())
+        self.starred_repo
+            .unstar_song(user_id, song_id)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
     }
 
     fn get_starred_artists(&self, user_id: i32) -> Vec<(Artist, NaiveDateTime)> {
-        self.starred_repo.get_starred_artists(user_id).unwrap_or_default()
+        self.starred_repo
+            .get_starred_artists(user_id)
+            .unwrap_or_default()
     }
 
     fn get_starred_albums(&self, user_id: i32) -> Vec<(Album, NaiveDateTime)> {
-        self.starred_repo.get_starred_albums(user_id).unwrap_or_default()
+        self.starred_repo
+            .get_starred_albums(user_id)
+            .unwrap_or_default()
     }
 
     fn get_starred_songs(&self, user_id: i32) -> Vec<(Song, NaiveDateTime)> {
-        self.starred_repo.get_starred_songs(user_id).unwrap_or_default()
+        self.starred_repo
+            .get_starred_songs(user_id)
+            .unwrap_or_default()
     }
 
     fn get_starred_at_for_artist(&self, user_id: i32, artist_id: i32) -> Option<NaiveDateTime> {
-        self.starred_repo.get_starred_at_for_artist(user_id, artist_id).ok().flatten()
+        self.starred_repo
+            .get_starred_at_for_artist(user_id, artist_id)
+            .ok()
+            .flatten()
     }
 
     fn get_starred_at_for_album(&self, user_id: i32, album_id: i32) -> Option<NaiveDateTime> {
-        self.starred_repo.get_starred_at_for_album(user_id, album_id).ok().flatten()
+        self.starred_repo
+            .get_starred_at_for_album(user_id, album_id)
+            .ok()
+            .flatten()
     }
 
     fn get_starred_at_for_song(&self, user_id: i32, song_id: i32) -> Option<NaiveDateTime> {
-        self.starred_repo.get_starred_at_for_song(user_id, song_id).ok().flatten()
+        self.starred_repo
+            .get_starred_at_for_song(user_id, song_id)
+            .ok()
+            .flatten()
     }
 
-    fn scrobble(&self, user_id: i32, song_id: i32, time: Option<i64>, submission: bool) -> Result<(), String> {
-        self.scrobble_repo.scrobble(user_id, song_id, time, submission).map_err(|e| e.to_string())
+    fn scrobble(
+        &self,
+        user_id: i32,
+        song_id: i32,
+        time: Option<i64>,
+        submission: bool,
+    ) -> Result<(), String> {
+        self.scrobble_repo
+            .scrobble(user_id, song_id, time, submission)
+            .map_err(|e| e.to_string())
     }
 
-    fn set_now_playing(&self, user_id: i32, song_id: i32, player_id: Option<&str>) -> Result<(), String> {
-        self.now_playing_repo.set_now_playing(user_id, song_id, player_id).map_err(|e| e.to_string())
+    fn set_now_playing(
+        &self,
+        user_id: i32,
+        song_id: i32,
+        player_id: Option<&str>,
+    ) -> Result<(), String> {
+        self.now_playing_repo
+            .set_now_playing(user_id, song_id, player_id)
+            .map_err(|e| e.to_string())
     }
 
     fn get_now_playing(&self) -> Vec<NowPlayingEntry> {
-        self.now_playing_repo.get_all_now_playing().unwrap_or_default()
+        self.now_playing_repo
+            .get_all_now_playing()
+            .unwrap_or_default()
     }
 
     fn get_random_songs(
@@ -760,7 +872,9 @@ impl AuthState for DatabaseAuthState {
         to_year: Option<i32>,
         music_folder_id: Option<i32>,
     ) -> Vec<Song> {
-        self.song_repo.find_random(size, genre, from_year, to_year, music_folder_id).unwrap_or_default()
+        self.song_repo
+            .find_random(size, genre, from_year, to_year, music_folder_id)
+            .unwrap_or_default()
     }
 
     fn get_songs_by_genre(
@@ -770,31 +884,47 @@ impl AuthState for DatabaseAuthState {
         offset: i64,
         music_folder_id: Option<i32>,
     ) -> Vec<Song> {
-        self.song_repo.find_by_genre(genre, count, offset, music_folder_id).unwrap_or_default()
+        self.song_repo
+            .find_by_genre(genre, count, offset, music_folder_id)
+            .unwrap_or_default()
     }
 
     fn set_song_rating(&self, user_id: i32, song_id: i32, rating: i32) -> Result<(), String> {
-        self.rating_repo.set_song_rating(user_id, song_id, rating).map_err(|e| e.to_string())
+        self.rating_repo
+            .set_song_rating(user_id, song_id, rating)
+            .map_err(|e| e.to_string())
     }
 
     fn set_album_rating(&self, user_id: i32, album_id: i32, rating: i32) -> Result<(), String> {
-        self.rating_repo.set_album_rating(user_id, album_id, rating).map_err(|e| e.to_string())
+        self.rating_repo
+            .set_album_rating(user_id, album_id, rating)
+            .map_err(|e| e.to_string())
     }
 
     fn set_artist_rating(&self, user_id: i32, artist_id: i32, rating: i32) -> Result<(), String> {
-        self.rating_repo.set_artist_rating(user_id, artist_id, rating).map_err(|e| e.to_string())
+        self.rating_repo
+            .set_artist_rating(user_id, artist_id, rating)
+            .map_err(|e| e.to_string())
     }
 
     fn get_song_rating(&self, user_id: i32, song_id: i32) -> Option<i32> {
-        self.rating_repo.get_song_rating(user_id, song_id).ok().flatten()
+        self.rating_repo
+            .get_song_rating(user_id, song_id)
+            .ok()
+            .flatten()
     }
 
     fn get_album_rating(&self, user_id: i32, album_id: i32) -> Option<i32> {
-        self.rating_repo.get_album_rating(user_id, album_id).ok().flatten()
+        self.rating_repo
+            .get_album_rating(user_id, album_id)
+            .ok()
+            .flatten()
     }
 
     fn get_playlists(&self, user_id: i32, username: &str) -> Vec<Playlist> {
-        self.playlist_repo.get_playlists(user_id, username).unwrap_or_default()
+        self.playlist_repo
+            .get_playlists(user_id, username)
+            .unwrap_or_default()
     }
 
     fn get_playlist(&self, playlist_id: i32) -> Option<Playlist> {
@@ -802,11 +932,21 @@ impl AuthState for DatabaseAuthState {
     }
 
     fn get_playlist_songs(&self, playlist_id: i32) -> Vec<Song> {
-        self.playlist_repo.get_playlist_songs(playlist_id).unwrap_or_default()
+        self.playlist_repo
+            .get_playlist_songs(playlist_id)
+            .unwrap_or_default()
     }
 
-    fn create_playlist(&self, user_id: i32, name: &str, comment: Option<&str>, song_ids: &[i32]) -> Result<Playlist, String> {
-        self.playlist_repo.create_playlist(user_id, name, comment, song_ids).map_err(|e| e.to_string())
+    fn create_playlist(
+        &self,
+        user_id: i32,
+        name: &str,
+        comment: Option<&str>,
+        song_ids: &[i32],
+    ) -> Result<Playlist, String> {
+        self.playlist_repo
+            .create_playlist(user_id, name, comment, song_ids)
+            .map_err(|e| e.to_string())
     }
 
     fn update_playlist(
@@ -818,19 +958,35 @@ impl AuthState for DatabaseAuthState {
         song_ids_to_add: &[i32],
         song_indices_to_remove: &[i32],
     ) -> Result<(), String> {
-        self.playlist_repo.update_playlist(playlist_id, name, comment, public, song_ids_to_add, song_indices_to_remove).map_err(|e| e.to_string())
+        self.playlist_repo
+            .update_playlist(
+                playlist_id,
+                name,
+                comment,
+                public,
+                song_ids_to_add,
+                song_indices_to_remove,
+            )
+            .map_err(|e| e.to_string())
     }
 
     fn delete_playlist(&self, playlist_id: i32) -> Result<bool, String> {
-        self.playlist_repo.delete_playlist(playlist_id).map_err(|e| e.to_string())
+        self.playlist_repo
+            .delete_playlist(playlist_id)
+            .map_err(|e| e.to_string())
     }
 
     fn is_playlist_owner(&self, user_id: i32, playlist_id: i32) -> bool {
-        self.playlist_repo.is_owner(user_id, playlist_id).unwrap_or(false)
+        self.playlist_repo
+            .is_owner(user_id, playlist_id)
+            .unwrap_or(false)
     }
 
     fn get_play_queue(&self, user_id: i32, username: &str) -> Option<PlayQueue> {
-        self.play_queue_repo.get_play_queue(user_id, username).ok().flatten()
+        self.play_queue_repo
+            .get_play_queue(user_id, username)
+            .ok()
+            .flatten()
     }
 
     fn save_play_queue(
@@ -841,7 +997,9 @@ impl AuthState for DatabaseAuthState {
         position: Option<i64>,
         changed_by: Option<&str>,
     ) -> Result<(), String> {
-        self.play_queue_repo.save_play_queue(user_id, song_ids, current_song_id, position, changed_by).map_err(|e| e.to_string())
+        self.play_queue_repo
+            .save_play_queue(user_id, song_ids, current_song_id, position, changed_by)
+            .map_err(|e| e.to_string())
     }
 
     fn get_user(&self, username: &str) -> Option<User> {
@@ -853,27 +1011,32 @@ impl AuthState for DatabaseAuthState {
     }
 
     fn delete_user(&self, username: &str) -> Result<bool, String> {
-        let user = self.user_repo.find_by_username(username)
+        let user = self
+            .user_repo
+            .find_by_username(username)
             .map_err(|e| e.to_string())?
             .ok_or_else(|| format!("User '{}' not found", username))?;
         self.user_repo.delete(user.id).map_err(|e| e.to_string())
     }
 
     fn change_password(&self, username: &str, new_password: &str) -> Result<(), String> {
-        let user = self.user_repo.find_by_username(username)
+        let user = self
+            .user_repo
+            .find_by_username(username)
             .map_err(|e| e.to_string())?
             .ok_or_else(|| format!("User '{}' not found", username))?;
-        
-        let password_hash = hash_password(new_password)
+
+        let password_hash = hash_password(new_password).map_err(|e| e.to_string())?;
+
+        self.user_repo
+            .update_password(user.id, &password_hash)
             .map_err(|e| e.to_string())?;
-        
-        self.user_repo.update_password(user.id, &password_hash)
-            .map_err(|e| e.to_string())?;
-        
+
         // Also update the subsonic_password for token auth compatibility
-        self.user_repo.update_subsonic_password(user.id, new_password)
+        self.user_repo
+            .update_subsonic_password(user.id, new_password)
             .map_err(|e| e.to_string())?;
-        
+
         Ok(())
     }
 
@@ -895,8 +1058,7 @@ impl AuthState for DatabaseAuthState {
         share_role: bool,
         video_conversion_role: bool,
     ) -> Result<User, String> {
-        let password_hash = hash_password(password)
-            .map_err(|e| e.to_string())?;
+        let password_hash = hash_password(password).map_err(|e| e.to_string())?;
 
         let new_user = NewUser {
             username,
@@ -964,7 +1126,9 @@ impl AuthState for DatabaseAuthState {
             max_bit_rate,
         };
 
-        self.user_repo.update_user(&update).map_err(|e| e.to_string())?;
+        self.user_repo
+            .update_user(&update)
+            .map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -976,12 +1140,21 @@ impl AuthState for DatabaseAuthState {
         self.scan_state.clone()
     }
 
-    fn get_similar_songs_by_artist(&self, artist_id: i32, exclude_song_id: i32, limit: i64) -> Vec<Song> {
-        self.song_repo.find_random_by_artist(artist_id, exclude_song_id, limit).unwrap_or_default()
+    fn get_similar_songs_by_artist(
+        &self,
+        artist_id: i32,
+        exclude_song_id: i32,
+        limit: i64,
+    ) -> Vec<Song> {
+        self.song_repo
+            .find_random_by_artist(artist_id, exclude_song_id, limit)
+            .unwrap_or_default()
     }
 
     fn get_top_songs_by_artist_name(&self, artist_name: &str, limit: i64) -> Vec<Song> {
-        self.song_repo.find_top_by_artist_name(artist_name, limit).unwrap_or_default()
+        self.song_repo
+            .find_top_by_artist_name(artist_name, limit)
+            .unwrap_or_default()
     }
 }
 
@@ -1027,7 +1200,7 @@ mod tests {
         };
 
         let merged = query.merge_with(form);
-        
+
         // Query params should take precedence
         assert_eq!(merged.u, "user");
         assert_eq!(merged.v, "1.16.1");

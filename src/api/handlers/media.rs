@@ -2,7 +2,7 @@
 
 use axum::{
     body::Body,
-    http::{header, HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
 };
 use std::path::Path;
@@ -81,8 +81,7 @@ pub async fn stream(
 
     // Check that user has stream permission
     if !auth.user.roles.stream_role {
-        return error_response(auth.format, &ApiError::NotAuthorized)
-            .into_response();
+        return error_response(auth.format, &ApiError::NotAuthorized).into_response();
     }
 
     // Get file path and check it exists
@@ -151,7 +150,7 @@ pub async fn stream(
 
                 // Seek to start position
                 let mut file = file;
-                if let Err(_) = file.seek(std::io::SeekFrom::Start(start)).await {
+                if file.seek(std::io::SeekFrom::Start(start)).await.is_err() {
                     return error_response(
                         auth.format,
                         &ApiError::Generic("Failed to seek in file".into()),
@@ -224,8 +223,7 @@ pub async fn download(
 
     // Check that user has download permission
     if !auth.user.roles.download_role {
-        return error_response(auth.format, &ApiError::NotAuthorized)
-            .into_response();
+        return error_response(auth.format, &ApiError::NotAuthorized).into_response();
     }
 
     // Get file path and check it exists
@@ -322,8 +320,7 @@ pub async fn get_cover_art(
 
     // Check that user has coverArt permission
     if !auth.user.roles.cover_art_role {
-        return error_response(auth.format, &ApiError::NotAuthorized)
-            .into_response();
+        return error_response(auth.format, &ApiError::NotAuthorized).into_response();
     }
 
     // Get cover art cache directory

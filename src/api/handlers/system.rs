@@ -3,7 +3,9 @@
 use axum::response::IntoResponse;
 
 use crate::api::auth::SubsonicAuth;
-use crate::api::response::{ok_bookmarks, ok_empty, ok_license, ok_open_subsonic_extensions, ok_token_info};
+use crate::api::response::{
+    ok_bookmarks, ok_empty, ok_license, ok_open_subsonic_extensions, ok_token_info,
+};
 use crate::models::music::TokenInfoResponse;
 
 /// GET/POST /rest/ping[.view]

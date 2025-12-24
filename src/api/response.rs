@@ -4,7 +4,7 @@
 //! The format is determined by the `f` query parameter (xml, json, jsonp).
 
 use axum::{
-    http::{header, StatusCode},
+    http::{StatusCode, header},
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
@@ -14,11 +14,10 @@ use crate::models::music::{
     AlbumInfoResponse, AlbumList2Response, AlbumListResponse, AlbumWithSongsID3Response,
     ArtistInfo2Response, ArtistInfoResponse, ArtistWithAlbumsID3Response, ArtistsID3Response,
     ChildResponse, DirectoryResponse, GenresResponse, IndexesResponse, LyricsResponse,
-    MusicFolderResponse, NowPlayingResponse, PlaylistWithSongsResponse, PlaylistsResponse,
-    PlayQueueByIndexResponse, PlayQueueResponse, RandomSongsResponse, SearchResult2Response,
-    SearchResult3Response, TokenInfoResponse,
-    SearchResultResponse, SimilarSongs2Response, SimilarSongsResponse, SongsByGenreResponse,
-    Starred2Response, StarredResponse, TopSongsResponse,
+    MusicFolderResponse, NowPlayingResponse, PlayQueueByIndexResponse, PlayQueueResponse,
+    PlaylistWithSongsResponse, PlaylistsResponse, RandomSongsResponse, SearchResult2Response,
+    SearchResult3Response, SearchResultResponse, SimilarSongs2Response, SimilarSongsResponse,
+    SongsByGenreResponse, Starred2Response, StarredResponse, TokenInfoResponse, TopSongsResponse,
 };
 use crate::models::user::{UserResponse, UsersResponse};
 
@@ -1408,7 +1407,10 @@ mod json {
         pub error: Option<ErrorDetail>,
         #[serde(skip_serializing_if = "Option::is_none")]
         pub license: Option<License>,
-        #[serde(skip_serializing_if = "Option::is_none", rename = "openSubsonicExtensions")]
+        #[serde(
+            skip_serializing_if = "Option::is_none",
+            rename = "openSubsonicExtensions"
+        )]
         pub open_subsonic_extensions: Option<Vec<OpenSubsonicExtension>>,
         #[serde(skip_serializing_if = "Option::is_none", rename = "musicFolders")]
         pub music_folders: Option<MusicFoldersJson>,
@@ -1700,7 +1702,10 @@ mod json {
             self
         }
 
-        pub fn with_play_queue_by_index(mut self, play_queue_by_index: super::PlayQueueByIndexResponse) -> Self {
+        pub fn with_play_queue_by_index(
+            mut self,
+            play_queue_by_index: super::PlayQueueByIndexResponse,
+        ) -> Self {
             self.play_queue_by_index = Some(play_queue_by_index);
             self
         }
@@ -1808,6 +1813,7 @@ pub struct SubsonicResponse {
     kind: ResponseKind,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum ResponseKind {
     Empty,
     License,
@@ -1875,7 +1881,10 @@ impl SubsonicResponse {
         }
     }
 
-    pub fn open_subsonic_extensions(format: Format, extensions: Vec<OpenSubsonicExtension>) -> Self {
+    pub fn open_subsonic_extensions(
+        format: Format,
+        extensions: Vec<OpenSubsonicExtension>,
+    ) -> Self {
         Self {
             format,
             kind: ResponseKind::OpenSubsonicExtensions(extensions),
@@ -1994,7 +2003,10 @@ impl SubsonicResponse {
         }
     }
 
-    pub fn play_queue_by_index(format: Format, play_queue_by_index: PlayQueueByIndexResponse) -> Self {
+    pub fn play_queue_by_index(
+        format: Format,
+        play_queue_by_index: PlayQueueByIndexResponse,
+    ) -> Self {
         Self {
             format,
             kind: ResponseKind::PlayQueueByIndex(play_queue_by_index),
@@ -2131,6 +2143,7 @@ impl IntoResponse for SubsonicResponse {
 }
 
 impl SubsonicResponse {
+    #[allow(clippy::wrong_self_convention)]
     fn to_xml_response(self) -> Response {
         let xml_result = match self.kind {
             ResponseKind::Empty => quick_xml::se::to_string(&xml::EmptyResponse::ok()),
@@ -2157,15 +2170,11 @@ impl SubsonicResponse {
             ResponseKind::Artists(artists) => {
                 quick_xml::se::to_string(&xml::ArtistsResponse::new(artists))
             }
-            ResponseKind::Album(album) => {
-                quick_xml::se::to_string(&xml::AlbumResponse::new(album))
-            }
+            ResponseKind::Album(album) => quick_xml::se::to_string(&xml::AlbumResponse::new(album)),
             ResponseKind::Artist(artist) => {
                 quick_xml::se::to_string(&xml::ArtistResponse::new(artist))
             }
-            ResponseKind::Song(song) => {
-                quick_xml::se::to_string(&xml::SongResponse::new(song))
-            }
+            ResponseKind::Song(song) => quick_xml::se::to_string(&xml::SongResponse::new(song)),
             ResponseKind::AlbumList2(album_list2) => {
                 quick_xml::se::to_string(&xml::AlbumList2Response::new(album_list2))
             }
@@ -2202,18 +2211,12 @@ impl SubsonicResponse {
             ResponseKind::TokenInfo(token_info) => {
                 quick_xml::se::to_string(&xml::TokenInfoResponse::new(token_info))
             }
-            ResponseKind::User(user) => {
-                quick_xml::se::to_string(&xml::UserResponse::new(user))
-            }
-            ResponseKind::Users(users) => {
-                quick_xml::se::to_string(&xml::UsersResponse::new(users))
-            }
+            ResponseKind::User(user) => quick_xml::se::to_string(&xml::UserResponse::new(user)),
+            ResponseKind::Users(users) => quick_xml::se::to_string(&xml::UsersResponse::new(users)),
             ResponseKind::ScanStatus { scanning, count } => {
                 quick_xml::se::to_string(&xml::ScanStatusResponse::new(scanning, count))
             }
-            ResponseKind::Bookmarks => {
-                quick_xml::se::to_string(&xml::BookmarksResponse::new())
-            }
+            ResponseKind::Bookmarks => quick_xml::se::to_string(&xml::BookmarksResponse::new()),
             ResponseKind::ArtistInfo2(artist_info2) => {
                 quick_xml::se::to_string(&xml::ArtistInfo2Response::new(artist_info2))
             }
@@ -2270,6 +2273,7 @@ impl SubsonicResponse {
         }
     }
 
+    #[allow(clippy::wrong_self_convention)]
     fn to_json_response(self) -> Response {
         let response = match self.kind {
             ResponseKind::Empty => json::SubsonicResponse::ok().wrap(),
@@ -2277,111 +2281,95 @@ impl SubsonicResponse {
             ResponseKind::Error { code, message } => {
                 json::SubsonicResponse::error(code, message).wrap()
             }
-            ResponseKind::OpenSubsonicExtensions(extensions) => {
-                json::SubsonicResponse::ok().with_extensions(extensions).wrap()
-            }
-            ResponseKind::MusicFolders(folders) => {
-                json::SubsonicResponse::ok().with_music_folders(folders).wrap()
-            }
+            ResponseKind::OpenSubsonicExtensions(extensions) => json::SubsonicResponse::ok()
+                .with_extensions(extensions)
+                .wrap(),
+            ResponseKind::MusicFolders(folders) => json::SubsonicResponse::ok()
+                .with_music_folders(folders)
+                .wrap(),
             ResponseKind::Indexes(indexes) => {
                 json::SubsonicResponse::ok().with_indexes(indexes).wrap()
             }
             ResponseKind::Artists(artists) => {
                 json::SubsonicResponse::ok().with_artists(artists).wrap()
             }
-            ResponseKind::Album(album) => {
-                json::SubsonicResponse::ok().with_album(album).wrap()
-            }
-            ResponseKind::Artist(artist) => {
-                json::SubsonicResponse::ok().with_artist(artist).wrap()
-            }
-            ResponseKind::Song(song) => {
-                json::SubsonicResponse::ok().with_song(song).wrap()
-            }
-            ResponseKind::AlbumList2(album_list2) => {
-                json::SubsonicResponse::ok().with_album_list2(album_list2).wrap()
-            }
-            ResponseKind::Genres(genres) => {
-                json::SubsonicResponse::ok().with_genres(genres).wrap()
-            }
-            ResponseKind::SearchResult3(search_result3) => {
-                json::SubsonicResponse::ok().with_search_result3(search_result3).wrap()
-            }
+            ResponseKind::Album(album) => json::SubsonicResponse::ok().with_album(album).wrap(),
+            ResponseKind::Artist(artist) => json::SubsonicResponse::ok().with_artist(artist).wrap(),
+            ResponseKind::Song(song) => json::SubsonicResponse::ok().with_song(song).wrap(),
+            ResponseKind::AlbumList2(album_list2) => json::SubsonicResponse::ok()
+                .with_album_list2(album_list2)
+                .wrap(),
+            ResponseKind::Genres(genres) => json::SubsonicResponse::ok().with_genres(genres).wrap(),
+            ResponseKind::SearchResult3(search_result3) => json::SubsonicResponse::ok()
+                .with_search_result3(search_result3)
+                .wrap(),
             ResponseKind::Starred2(starred2) => {
                 json::SubsonicResponse::ok().with_starred2(starred2).wrap()
             }
-            ResponseKind::NowPlaying(now_playing) => {
-                json::SubsonicResponse::ok().with_now_playing(now_playing).wrap()
-            }
-            ResponseKind::RandomSongs(random_songs) => {
-                json::SubsonicResponse::ok().with_random_songs(random_songs).wrap()
-            }
-            ResponseKind::SongsByGenre(songs_by_genre) => {
-                json::SubsonicResponse::ok().with_songs_by_genre(songs_by_genre).wrap()
-            }
-            ResponseKind::Playlists(playlists) => {
-                json::SubsonicResponse::ok().with_playlists(playlists).wrap()
-            }
+            ResponseKind::NowPlaying(now_playing) => json::SubsonicResponse::ok()
+                .with_now_playing(now_playing)
+                .wrap(),
+            ResponseKind::RandomSongs(random_songs) => json::SubsonicResponse::ok()
+                .with_random_songs(random_songs)
+                .wrap(),
+            ResponseKind::SongsByGenre(songs_by_genre) => json::SubsonicResponse::ok()
+                .with_songs_by_genre(songs_by_genre)
+                .wrap(),
+            ResponseKind::Playlists(playlists) => json::SubsonicResponse::ok()
+                .with_playlists(playlists)
+                .wrap(),
             ResponseKind::Playlist(playlist) => {
                 json::SubsonicResponse::ok().with_playlist(playlist).wrap()
             }
-            ResponseKind::PlayQueue(play_queue) => {
-                json::SubsonicResponse::ok().with_play_queue(play_queue).wrap()
-            }
-            ResponseKind::PlayQueueByIndex(play_queue_by_index) => {
-                json::SubsonicResponse::ok().with_play_queue_by_index(play_queue_by_index).wrap()
-            }
-            ResponseKind::TokenInfo(token_info) => {
-                json::SubsonicResponse::ok().with_token_info(token_info).wrap()
-            }
-            ResponseKind::User(user) => {
-                json::SubsonicResponse::ok().with_user(user).wrap()
-            }
-            ResponseKind::Users(users) => {
-                json::SubsonicResponse::ok().with_users(users).wrap()
-            }
-            ResponseKind::ScanStatus { scanning, count } => {
-                json::SubsonicResponse::ok().with_scan_status(scanning, count).wrap()
-            }
-            ResponseKind::Bookmarks => {
-                json::SubsonicResponse::ok().with_bookmarks().wrap()
-            }
-            ResponseKind::ArtistInfo2(artist_info2) => {
-                json::SubsonicResponse::ok().with_artist_info2(artist_info2).wrap()
-            }
-            ResponseKind::AlbumInfo(album_info) => {
-                json::SubsonicResponse::ok().with_album_info(album_info).wrap()
-            }
-            ResponseKind::SimilarSongs2(similar_songs2) => {
-                json::SubsonicResponse::ok().with_similar_songs2(similar_songs2).wrap()
-            }
-            ResponseKind::TopSongs(top_songs) => {
-                json::SubsonicResponse::ok().with_top_songs(top_songs).wrap()
-            }
-            ResponseKind::Lyrics(lyrics) => {
-                json::SubsonicResponse::ok().with_lyrics(lyrics).wrap()
-            }
-            ResponseKind::Directory(directory) => {
-                json::SubsonicResponse::ok().with_directory(directory).wrap()
-            }
-            ResponseKind::AlbumList(album_list) => {
-                json::SubsonicResponse::ok().with_album_list(album_list).wrap()
-            }
+            ResponseKind::PlayQueue(play_queue) => json::SubsonicResponse::ok()
+                .with_play_queue(play_queue)
+                .wrap(),
+            ResponseKind::PlayQueueByIndex(play_queue_by_index) => json::SubsonicResponse::ok()
+                .with_play_queue_by_index(play_queue_by_index)
+                .wrap(),
+            ResponseKind::TokenInfo(token_info) => json::SubsonicResponse::ok()
+                .with_token_info(token_info)
+                .wrap(),
+            ResponseKind::User(user) => json::SubsonicResponse::ok().with_user(user).wrap(),
+            ResponseKind::Users(users) => json::SubsonicResponse::ok().with_users(users).wrap(),
+            ResponseKind::ScanStatus { scanning, count } => json::SubsonicResponse::ok()
+                .with_scan_status(scanning, count)
+                .wrap(),
+            ResponseKind::Bookmarks => json::SubsonicResponse::ok().with_bookmarks().wrap(),
+            ResponseKind::ArtistInfo2(artist_info2) => json::SubsonicResponse::ok()
+                .with_artist_info2(artist_info2)
+                .wrap(),
+            ResponseKind::AlbumInfo(album_info) => json::SubsonicResponse::ok()
+                .with_album_info(album_info)
+                .wrap(),
+            ResponseKind::SimilarSongs2(similar_songs2) => json::SubsonicResponse::ok()
+                .with_similar_songs2(similar_songs2)
+                .wrap(),
+            ResponseKind::TopSongs(top_songs) => json::SubsonicResponse::ok()
+                .with_top_songs(top_songs)
+                .wrap(),
+            ResponseKind::Lyrics(lyrics) => json::SubsonicResponse::ok().with_lyrics(lyrics).wrap(),
+            ResponseKind::Directory(directory) => json::SubsonicResponse::ok()
+                .with_directory(directory)
+                .wrap(),
+            ResponseKind::AlbumList(album_list) => json::SubsonicResponse::ok()
+                .with_album_list(album_list)
+                .wrap(),
             ResponseKind::Starred(starred) => {
                 json::SubsonicResponse::ok().with_starred(starred).wrap()
             }
-            ResponseKind::SearchResult2(search_result2) => {
-                json::SubsonicResponse::ok().with_search_result2(search_result2).wrap()
-            }
-            ResponseKind::SearchResult(search_result) => {
-                json::SubsonicResponse::ok().with_search_result(search_result).wrap()
-            }
-            ResponseKind::ArtistInfo(artist_info) => {
-                json::SubsonicResponse::ok().with_artist_info(artist_info).wrap()
-            }
-            ResponseKind::SimilarSongs(similar_songs) => {
-                json::SubsonicResponse::ok().with_similar_songs(similar_songs).wrap()
-            }
+            ResponseKind::SearchResult2(search_result2) => json::SubsonicResponse::ok()
+                .with_search_result2(search_result2)
+                .wrap(),
+            ResponseKind::SearchResult(search_result) => json::SubsonicResponse::ok()
+                .with_search_result(search_result)
+                .wrap(),
+            ResponseKind::ArtistInfo(artist_info) => json::SubsonicResponse::ok()
+                .with_artist_info(artist_info)
+                .wrap(),
+            ResponseKind::SimilarSongs(similar_songs) => json::SubsonicResponse::ok()
+                .with_similar_songs(similar_songs)
+                .wrap(),
         };
 
         match serde_json::to_string(&response) {
@@ -2424,20 +2412,18 @@ fn transform_value(value: serde_json::Value) -> serde_json::Value {
         Value::Object(map) => {
             let mut new_map = serde_json::Map::new();
             for (key, val) in map {
-                let new_key = if key.starts_with('@') {
-                    key[1..].to_string()
+                let new_key = if let Some(stripped) = key.strip_prefix('@') {
+                    stripped.to_string()
                 } else if key == "$text" {
                     "value".to_string()
                 } else {
-                    key
+                    key.clone()
                 };
                 new_map.insert(new_key, transform_value(val));
             }
             Value::Object(new_map)
         }
-        Value::Array(arr) => {
-            Value::Array(arr.into_iter().map(transform_value).collect())
-        }
+        Value::Array(arr) => Value::Array(arr.into_iter().map(transform_value).collect()),
         other => other,
     }
 }
@@ -2507,7 +2493,10 @@ pub fn ok_genres(format: Format, genres: GenresResponse) -> SubsonicResponse {
 }
 
 /// Helper function to create a search result3 response.
-pub fn ok_search_result3(format: Format, search_result3: SearchResult3Response) -> SubsonicResponse {
+pub fn ok_search_result3(
+    format: Format,
+    search_result3: SearchResult3Response,
+) -> SubsonicResponse {
     SubsonicResponse::search_result3(format, search_result3)
 }
 
@@ -2547,7 +2536,10 @@ pub fn ok_play_queue(format: Format, play_queue: PlayQueueResponse) -> SubsonicR
 }
 
 /// Helper function to create a play queue by index response (OpenSubsonic).
-pub fn ok_play_queue_by_index(format: Format, play_queue_by_index: PlayQueueByIndexResponse) -> SubsonicResponse {
+pub fn ok_play_queue_by_index(
+    format: Format,
+    play_queue_by_index: PlayQueueByIndexResponse,
+) -> SubsonicResponse {
     SubsonicResponse::play_queue_by_index(format, play_queue_by_index)
 }
 
@@ -2587,7 +2579,10 @@ pub fn ok_album_info(format: Format, album_info: AlbumInfoResponse) -> SubsonicR
 }
 
 /// Helper function to create a similar songs2 response.
-pub fn ok_similar_songs2(format: Format, similar_songs2: SimilarSongs2Response) -> SubsonicResponse {
+pub fn ok_similar_songs2(
+    format: Format,
+    similar_songs2: SimilarSongs2Response,
+) -> SubsonicResponse {
     SubsonicResponse::similar_songs2(format, similar_songs2)
 }
 
@@ -2617,7 +2612,10 @@ pub fn ok_starred(format: Format, starred: StarredResponse) -> SubsonicResponse 
 }
 
 /// Helper function to create a search result2 response (search2).
-pub fn ok_search_result2(format: Format, search_result2: SearchResult2Response) -> SubsonicResponse {
+pub fn ok_search_result2(
+    format: Format,
+    search_result2: SearchResult2Response,
+) -> SubsonicResponse {
     SubsonicResponse::search_result2(format, search_result2)
 }
 

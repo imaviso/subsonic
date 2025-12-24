@@ -7,7 +7,7 @@
 use axum::response::{IntoResponse, Response};
 use thiserror::Error;
 
-use super::response::{error_response, Format};
+use super::response::{Format, error_response};
 
 /// Subsonic API error codes.
 /// These are defined by the Subsonic API specification.

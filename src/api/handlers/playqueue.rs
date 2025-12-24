@@ -12,15 +12,15 @@ use crate::models::music::{ChildResponse, PlayQueueByIndexResponse, PlayQueueRes
 fn parse_repeated_param(query: &str, param_name: &str) -> Vec<String> {
     let mut values = Vec::new();
     for part in query.split('&') {
-        if let Some((key, value)) = part.split_once('=') {
-            if key == param_name {
-                // URL decode the value
-                if let Ok(decoded) = urlencoding::decode(value) {
-                    values.push(decoded.into_owned());
-                } else {
-                    values.push(value.to_string());
-                }
-            }
+        if let Some((key, value)) = part.split_once('=')
+            && key == param_name
+        {
+            // URL decode the value
+            values.push(
+                urlencoding::decode(value)
+                    .map(|d| d.into_owned())
+                    .unwrap_or_else(|_| value.to_string()),
+            );
         }
     }
     values
@@ -48,7 +48,10 @@ pub async fn get_play_queue(auth: SubsonicAuth) -> impl IntoResponse {
                 current: play_queue.current_song.as_ref().map(|s| s.id.to_string()),
                 position: play_queue.position,
                 username: play_queue.username.clone(),
-                changed: play_queue.changed_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+                changed: play_queue
+                    .changed_at
+                    .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                    .to_string(),
                 changed_by: play_queue.changed_by.clone(),
                 entries: song_responses,
             };
@@ -61,7 +64,9 @@ pub async fn get_play_queue(auth: SubsonicAuth) -> impl IntoResponse {
                 current: None,
                 position: None,
                 username: username.clone(),
-                changed: chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+                changed: chrono::Utc::now()
+                    .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                    .to_string(),
                 changed_by: None,
                 entries: vec![],
             };
@@ -74,15 +79,12 @@ pub async fn get_play_queue(auth: SubsonicAuth) -> impl IntoResponse {
 /// GET/POST /rest/savePlayQueue[.view]
 ///
 /// Saves the current play queue for the user.
-/// 
+///
 /// Parameters:
 /// - `id`: ID of a song in the play queue (can be repeated to define the entire queue)
 /// - `current`: The ID of the currently playing song
 /// - `position`: Position in milliseconds within the currently playing song
-pub async fn save_play_queue(
-    RawQuery(query): RawQuery,
-    auth: SubsonicAuth,
-) -> impl IntoResponse {
+pub async fn save_play_queue(RawQuery(query): RawQuery, auth: SubsonicAuth) -> impl IntoResponse {
     let query = query.unwrap_or_default();
     let user_id = auth.user.id;
 
@@ -109,13 +111,10 @@ pub async fn save_play_queue(
         Some(auth.params.c.as_str())
     };
 
-    if let Err(e) = auth.state.save_play_queue(
-        user_id,
-        &song_ids,
-        current_song_id,
-        position,
-        changed_by,
-    ) {
+    if let Err(e) =
+        auth.state
+            .save_play_queue(user_id, &song_ids, current_song_id, position, changed_by)
+    {
         tracing::warn!("Failed to save play queue: {}", e);
         // Don't return an error - the API spec says this should succeed silently
     }
@@ -155,7 +154,10 @@ pub async fn get_play_queue_by_index(auth: SubsonicAuth) -> impl IntoResponse {
                 current_index,
                 position: play_queue.position,
                 username: play_queue.username.clone(),
-                changed: play_queue.changed_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+                changed: play_queue
+                    .changed_at
+                    .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                    .to_string(),
                 changed_by: play_queue.changed_by.clone(),
                 entries: song_responses,
             };
@@ -168,7 +170,9 @@ pub async fn get_play_queue_by_index(auth: SubsonicAuth) -> impl IntoResponse {
                 current_index: None,
                 position: None,
                 username: username.clone(),
-                changed: chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+                changed: chrono::Utc::now()
+                    .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                    .to_string(),
                 changed_by: None,
                 entries: vec![],
             };
@@ -220,13 +224,10 @@ pub async fn save_play_queue_by_index(
         Some(auth.params.c.as_str())
     };
 
-    if let Err(e) = auth.state.save_play_queue(
-        user_id,
-        &song_ids,
-        current_song_id,
-        position,
-        changed_by,
-    ) {
+    if let Err(e) =
+        auth.state
+            .save_play_queue(user_id, &song_ids, current_song_id, position, changed_by)
+    {
         tracing::warn!("Failed to save play queue by index: {}", e);
         // Don't return an error - the API spec says this should succeed silently
     }

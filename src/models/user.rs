@@ -62,7 +62,7 @@ impl User {
         // Try using subsonic_password if available, otherwise fall back to
         // verifying against the provided token using a different approach
         if let Some(ref password) = self.subsonic_password {
-            use md5::{Md5, Digest};
+            use md5::{Digest, Md5};
             let mut hasher = Md5::new();
             hasher.update(password.as_bytes());
             hasher.update(salt.as_bytes());

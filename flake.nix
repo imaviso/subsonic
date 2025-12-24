@@ -59,6 +59,26 @@
           pkg-config
         ];
       };
+
+      checks.clippy = pkgs.stdenv.mkDerivation {
+        name = "clippy";
+        src = ./.;
+        buildInputs = with pkgs; [ rustToolchain ];
+        buildPhase = ''
+          cargo clippy --all-targets -- -D warnings
+        '';
+        installPhase = "mkdir -p $out; touch $out/done";
+      };
+
+      checks.fmt = pkgs.stdenv.mkDerivation {
+        name = "fmt";
+        src = ./.;
+        buildInputs = with pkgs; [ rustToolchain ];
+        buildPhase = ''
+          cargo fmt -- --check
+        '';
+        installPhase = "mkdir -p $out; touch $out/done";
+      };
     }) // {
       overlays.default = final: prev: {
         rustToolchain = with inputs.fenix.packages.${prev.stdenv.hostPlatform.system};

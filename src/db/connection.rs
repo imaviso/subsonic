@@ -44,7 +44,7 @@ impl DbConfig {
     /// Build a connection pool from this configuration.
     pub fn build_pool(&self) -> Result<DbPool, Box<dyn std::error::Error>> {
         let manager = ConnectionManager::<SqliteConnection>::new(&self.database_url);
-        
+
         Pool::builder()
             .max_size(self.max_connections)
             .connection_timeout(Duration::from_secs(self.connection_timeout))
@@ -86,10 +86,8 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result:
     .execute(conn)?;
 
     // Create index for username lookups
-    diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)"
-    )
-    .execute(conn)?;
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
+        .execute(conn)?;
 
     // Create unique index for API key lookups (only for non-null values)
     diesel::sql_query(
@@ -100,7 +98,7 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result:
     // Migration: Add api_key column if it doesn't exist (for existing databases)
     // SQLite doesn't have a simple "ADD COLUMN IF NOT EXISTS" so we check first
     let has_api_key: Result<i32, _> = diesel::sql_query(
-        "SELECT COUNT(*) as cnt FROM pragma_table_info('users') WHERE name = 'api_key'"
+        "SELECT COUNT(*) as cnt FROM pragma_table_info('users') WHERE name = 'api_key'",
     )
     .get_result::<CountResult>(conn)
     .map(|r| r.cnt);
@@ -142,10 +140,8 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result:
     )
     .execute(conn)?;
 
-    diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_artists_name ON artists(name)"
-    )
-    .execute(conn)?;
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_artists_name ON artists(name)")
+        .execute(conn)?;
 
     // Create albums table
     diesel::sql_query(
@@ -170,15 +166,11 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result:
     )
     .execute(conn)?;
 
-    diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_albums_name ON albums(name)"
-    )
-    .execute(conn)?;
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_albums_name ON albums(name)")
+        .execute(conn)?;
 
-    diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_albums_artist_id ON albums(artist_id)"
-    )
-    .execute(conn)?;
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_albums_artist_id ON albums(artist_id)")
+        .execute(conn)?;
 
     // Create songs table
     diesel::sql_query(
@@ -219,32 +211,27 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result:
 
     // Migration: Add file_modified_at column if it doesn't exist (for existing databases)
     let has_file_modified_at: Result<i32, _> = diesel::sql_query(
-        "SELECT COUNT(*) as cnt FROM pragma_table_info('songs') WHERE name = 'file_modified_at'"
+        "SELECT COUNT(*) as cnt FROM pragma_table_info('songs') WHERE name = 'file_modified_at'",
     )
     .get_result::<CountResult>(conn)
     .map(|r| r.cnt);
 
     if has_file_modified_at.unwrap_or(0) == 0 {
-        let _ = diesel::sql_query("ALTER TABLE songs ADD COLUMN file_modified_at BIGINT").execute(conn);
+        let _ =
+            diesel::sql_query("ALTER TABLE songs ADD COLUMN file_modified_at BIGINT").execute(conn);
     }
 
-    diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_songs_title ON songs(title)"
-    )
-    .execute(conn)?;
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_songs_title ON songs(title)")
+        .execute(conn)?;
+
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_songs_album_id ON songs(album_id)")
+        .execute(conn)?;
+
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_songs_artist_id ON songs(artist_id)")
+        .execute(conn)?;
 
     diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_songs_album_id ON songs(album_id)"
-    )
-    .execute(conn)?;
-
-    diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_songs_artist_id ON songs(artist_id)"
-    )
-    .execute(conn)?;
-
-    diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_songs_music_folder_id ON songs(music_folder_id)"
+        "CREATE INDEX IF NOT EXISTS idx_songs_music_folder_id ON songs(music_folder_id)",
     )
     .execute(conn)?;
 
@@ -268,25 +255,17 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result:
     )
     .execute(conn)?;
 
-    diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_starred_user_id ON starred(user_id)"
-    )
-    .execute(conn)?;
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_starred_user_id ON starred(user_id)")
+        .execute(conn)?;
 
-    diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_starred_artist_id ON starred(artist_id)"
-    )
-    .execute(conn)?;
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_starred_artist_id ON starred(artist_id)")
+        .execute(conn)?;
 
-    diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_starred_album_id ON starred(album_id)"
-    )
-    .execute(conn)?;
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_starred_album_id ON starred(album_id)")
+        .execute(conn)?;
 
-    diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_starred_song_id ON starred(song_id)"
-    )
-    .execute(conn)?;
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_starred_song_id ON starred(song_id)")
+        .execute(conn)?;
 
     // Unique constraint to prevent duplicate stars
     diesel::sql_query(
@@ -319,14 +298,12 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result:
     )
     .execute(conn)?;
 
-    diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_now_playing_user_id ON now_playing(user_id)"
-    )
-    .execute(conn)?;
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_now_playing_user_id ON now_playing(user_id)")
+        .execute(conn)?;
 
     // Only one "now playing" entry per user
     diesel::sql_query(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_now_playing_user ON now_playing(user_id)"
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_now_playing_user ON now_playing(user_id)",
     )
     .execute(conn)?;
 
@@ -344,18 +321,14 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result:
     )
     .execute(conn)?;
 
-    diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_scrobbles_user_id ON scrobbles(user_id)"
-    )
-    .execute(conn)?;
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_scrobbles_user_id ON scrobbles(user_id)")
+        .execute(conn)?;
+
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_scrobbles_song_id ON scrobbles(song_id)")
+        .execute(conn)?;
 
     diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_scrobbles_song_id ON scrobbles(song_id)"
-    )
-    .execute(conn)?;
-
-    diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_scrobbles_played_at ON scrobbles(played_at DESC)"
+        "CREATE INDEX IF NOT EXISTS idx_scrobbles_played_at ON scrobbles(played_at DESC)",
     )
     .execute(conn)?;
 
@@ -382,7 +355,7 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result:
     .execute(conn)?;
 
     diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_user_ratings_user_id ON user_ratings(user_id)"
+        "CREATE INDEX IF NOT EXISTS idx_user_ratings_user_id ON user_ratings(user_id)",
     )
     .execute(conn)?;
 
@@ -419,10 +392,8 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result:
     )
     .execute(conn)?;
 
-    diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_playlists_user_id ON playlists(user_id)"
-    )
-    .execute(conn)?;
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_playlists_user_id ON playlists(user_id)")
+        .execute(conn)?;
 
     // Create playlist_songs table
     diesel::sql_query(
@@ -439,12 +410,12 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result:
     .execute(conn)?;
 
     diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_playlist_songs_playlist_id ON playlist_songs(playlist_id)"
+        "CREATE INDEX IF NOT EXISTS idx_playlist_songs_playlist_id ON playlist_songs(playlist_id)",
     )
     .execute(conn)?;
 
     diesel::sql_query(
-        "CREATE INDEX IF NOT EXISTS idx_playlist_songs_song_id ON playlist_songs(song_id)"
+        "CREATE INDEX IF NOT EXISTS idx_playlist_songs_song_id ON playlist_songs(song_id)",
     )
     .execute(conn)?;
 
@@ -464,7 +435,7 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result:
     .execute(conn)?;
 
     diesel::sql_query(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_play_queue_user_id ON play_queue(user_id)"
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_play_queue_user_id ON play_queue(user_id)",
     )
     .execute(conn)?;
 

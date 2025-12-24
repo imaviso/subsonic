@@ -7,22 +7,24 @@ use serde::Deserialize;
 use crate::api::auth::SubsonicAuth;
 use crate::api::error::ApiError;
 use crate::api::response::{error_response, ok_empty, ok_playlist, ok_playlists};
-use crate::models::music::{ChildResponse, PlaylistResponse, PlaylistWithSongsResponse, PlaylistsResponse};
+use crate::models::music::{
+    ChildResponse, PlaylistResponse, PlaylistWithSongsResponse, PlaylistsResponse,
+};
 
 /// Parse repeated query parameters from a query string.
 /// Handles both single values and repeated parameters like `?id=1&id=2`.
 fn parse_repeated_param(query: &str, param_name: &str) -> Vec<String> {
     let mut values = Vec::new();
     for part in query.split('&') {
-        if let Some((key, value)) = part.split_once('=') {
-            if key == param_name {
-                // URL decode the value
-                if let Ok(decoded) = urlencoding::decode(value) {
-                    values.push(decoded.into_owned());
-                } else {
-                    values.push(value.to_string());
-                }
-            }
+        if let Some((key, value)) = part.split_once('=')
+            && key == param_name
+        {
+            // URL decode the value
+            values.push(
+                urlencoding::decode(value)
+                    .map(|d| d.into_owned())
+                    .unwrap_or_else(|_| value.to_string()),
+            );
         }
     }
     values
@@ -101,7 +103,7 @@ pub async fn get_playlist(
         Some(id) => id,
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("id".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -110,7 +112,7 @@ pub async fn get_playlist(
         Some(p) => p,
         None => {
             return error_response(auth.format, &ApiError::NotFound("Playlist".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -137,8 +139,14 @@ pub async fn get_playlist(
         public: playlist.public,
         song_count: playlist.song_count,
         duration: playlist.duration,
-        created: playlist.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
-        changed: playlist.updated_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+        created: playlist
+            .created_at
+            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+            .to_string(),
+        changed: playlist
+            .updated_at
+            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+            .to_string(),
         cover_art,
         entries: song_responses,
     };
@@ -160,7 +168,7 @@ pub struct CreatePlaylistParams {
 /// GET/POST /rest/createPlaylist[.view]
 ///
 /// Creates (or updates) a playlist.
-/// 
+///
 /// Parameters:
 /// - `playlistId`: The playlist ID (if updating an existing playlist)
 /// - `name`: The playlist name (required if creating a new playlist)
@@ -189,27 +197,23 @@ pub async fn create_playlist(
                     auth.format,
                     &ApiError::Generic("Invalid playlistId".into()),
                 )
-                .into_response()
+                .into_response();
             }
         };
 
         // Check ownership
         if !auth.state.is_playlist_owner(user_id, playlist_id) {
-            return error_response(
-                auth.format,
-                &ApiError::NotAuthorized,
-            )
-            .into_response();
+            return error_response(auth.format, &ApiError::NotAuthorized).into_response();
         }
 
         // Update: add songs to existing playlist
         if let Err(e) = auth.state.update_playlist(
             playlist_id,
             params.name.as_deref(),
-            None,  // comment
-            None,  // public
+            None, // comment
+            None, // public
             &song_ids,
-            &[],  // no songs to remove
+            &[], // no songs to remove
         ) {
             tracing::warn!("Failed to update playlist {}: {}", playlist_id, e);
             return error_response(auth.format, &ApiError::Generic(e)).into_response();
@@ -237,8 +241,14 @@ pub async fn create_playlist(
                 public: playlist.public,
                 song_count: playlist.song_count,
                 duration: playlist.duration,
-                created: playlist.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
-                changed: playlist.updated_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+                created: playlist
+                    .created_at
+                    .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                    .to_string(),
+                changed: playlist
+                    .updated_at
+                    .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                    .to_string(),
                 cover_art,
                 entries: song_responses,
             };
@@ -252,7 +262,7 @@ pub async fn create_playlist(
         Some(n) if !n.is_empty() => n,
         _ => {
             return error_response(auth.format, &ApiError::MissingParameter("name".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -278,8 +288,14 @@ pub async fn create_playlist(
                 public: playlist.public,
                 song_count: playlist.song_count,
                 duration: playlist.duration,
-                created: playlist.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
-                changed: playlist.updated_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+                created: playlist
+                    .created_at
+                    .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                    .to_string(),
+                changed: playlist
+                    .updated_at
+                    .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                    .to_string(),
                 cover_art,
                 entries: song_responses,
             };
@@ -311,7 +327,7 @@ pub struct UpdatePlaylistParams {
 /// GET/POST /rest/updatePlaylist[.view]
 ///
 /// Updates a playlist. Only the owner can update a playlist.
-/// 
+///
 /// Parameters:
 /// - `playlistId`: The playlist ID (required)
 /// - `name`: The new name
@@ -327,21 +343,24 @@ pub async fn update_playlist(
     let query = query.unwrap_or_default();
     let user_id = auth.user.id;
 
-    let playlist_id = match params.playlist_id.as_ref().and_then(|id| id.parse::<i32>().ok()) {
+    let playlist_id = match params
+        .playlist_id
+        .as_ref()
+        .and_then(|id| id.parse::<i32>().ok())
+    {
         Some(id) => id,
         None => {
-            return error_response(auth.format, &ApiError::MissingParameter("playlistId".into()))
-                .into_response()
+            return error_response(
+                auth.format,
+                &ApiError::MissingParameter("playlistId".into()),
+            )
+            .into_response();
         }
     };
 
     // Check ownership
     if !auth.state.is_playlist_owner(user_id, playlist_id) {
-        return error_response(
-            auth.format,
-            &ApiError::NotAuthorized,
-        )
-        .into_response();
+        return error_response(auth.format, &ApiError::NotAuthorized).into_response();
     }
 
     // Parse song IDs to add and indices to remove
@@ -389,7 +408,7 @@ pub async fn delete_playlist(
         Some(id) => id,
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("id".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -397,11 +416,7 @@ pub async fn delete_playlist(
 
     // Check ownership
     if !auth.state.is_playlist_owner(user_id, playlist_id) {
-        return error_response(
-            auth.format,
-            &ApiError::NotAuthorized,
-        )
-        .into_response();
+        return error_response(auth.format, &ApiError::NotAuthorized).into_response();
     }
 
     match auth.state.delete_playlist(playlist_id) {

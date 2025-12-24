@@ -4,14 +4,14 @@ use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use thiserror::Error;
 
-use crate::db::schema::{
-    albums, artists, music_folders, play_queue, play_queue_songs, playlist_songs, playlists,
-    songs, starred, user_ratings, users,
-};
 use crate::db::DbPool;
+use crate::db::schema::{
+    albums, artists, music_folders, play_queue, play_queue_songs, playlist_songs, playlists, songs,
+    starred, user_ratings, users,
+};
+use crate::models::User;
 use crate::models::music::{Album, Artist, MusicFolder, NewMusicFolder, Song};
 use crate::models::user::UserRoles;
-use crate::models::User;
 
 /// Errors that can occur during user repository operations.
 #[derive(Debug, Error)]
@@ -200,9 +200,7 @@ impl UserRepository {
     pub fn find_all(&self) -> Result<Vec<User>, UserRepoError> {
         let mut conn = self.pool.get()?;
 
-        let results = users::table
-            .select(UserRow::as_select())
-            .load(&mut conn)?;
+        let results = users::table.select(UserRow::as_select()).load(&mut conn)?;
 
         Ok(results.into_iter().map(User::from).collect())
     }
@@ -238,14 +236,18 @@ impl UserRepository {
     pub fn delete(&self, user_id: i32) -> Result<bool, UserRepoError> {
         let mut conn = self.pool.get()?;
 
-        let deleted = diesel::delete(users::table.filter(users::id.eq(user_id)))
-            .execute(&mut conn)?;
+        let deleted =
+            diesel::delete(users::table.filter(users::id.eq(user_id))).execute(&mut conn)?;
 
         Ok(deleted > 0)
     }
 
     /// Update a user's password.
-    pub fn update_password(&self, user_id: i32, password_hash: &str) -> Result<bool, UserRepoError> {
+    pub fn update_password(
+        &self,
+        user_id: i32,
+        password_hash: &str,
+    ) -> Result<bool, UserRepoError> {
         let mut conn = self.pool.get()?;
 
         let updated = diesel::update(users::table.filter(users::id.eq(user_id)))
@@ -259,9 +261,7 @@ impl UserRepository {
     pub fn has_users(&self) -> Result<bool, UserRepoError> {
         let mut conn = self.pool.get()?;
 
-        let count = users::table
-            .count()
-            .get_result::<i64>(&mut conn)?;
+        let count = users::table.count().get_result::<i64>(&mut conn)?;
 
         Ok(count > 0)
     }
@@ -294,12 +294,12 @@ impl UserRepository {
     /// Returns the generated API key.
     pub fn generate_api_key(&self, user_id: i32) -> Result<String, UserRepoError> {
         use rand_core::{OsRng, RngCore};
-        
+
         // Generate a random 32-byte key and encode as hex (64 characters)
         let mut key_bytes = [0u8; 32];
         OsRng.fill_bytes(&mut key_bytes);
         let api_key = hex::encode(key_bytes);
-        
+
         self.set_api_key(user_id, Some(&api_key))?;
         Ok(api_key)
     }
@@ -310,7 +310,11 @@ impl UserRepository {
     }
 
     /// Update a user's subsonic password (used for token auth).
-    pub fn update_subsonic_password(&self, user_id: i32, subsonic_password: &str) -> Result<bool, UserRepoError> {
+    pub fn update_subsonic_password(
+        &self,
+        user_id: i32,
+        subsonic_password: &str,
+    ) -> Result<bool, UserRepoError> {
         let mut conn = self.pool.get()?;
 
         let updated = diesel::update(users::table.filter(users::id.eq(user_id)))
@@ -335,7 +339,10 @@ impl UserRepository {
         // Build the update - we update all provided fields
         let updated = diesel::update(users::table.filter(users::id.eq(user.id)))
             .set((
-                update.email.as_ref().map(|e| users::email.eq(Some(e.as_str()))),
+                update
+                    .email
+                    .as_ref()
+                    .map(|e| users::email.eq(Some(e.as_str()))),
                 update.admin_role.map(|v| users::admin_role.eq(v)),
                 update.settings_role.map(|v| users::settings_role.eq(v)),
                 update.stream_role.map(|v| users::stream_role.eq(v)),
@@ -347,7 +354,9 @@ impl UserRepository {
                 update.comment_role.map(|v| users::comment_role.eq(v)),
                 update.podcast_role.map(|v| users::podcast_role.eq(v)),
                 update.share_role.map(|v| users::share_role.eq(v)),
-                update.video_conversion_role.map(|v| users::video_conversion_role.eq(v)),
+                update
+                    .video_conversion_role
+                    .map(|v| users::video_conversion_role.eq(v)),
                 update.max_bit_rate.map(|v| users::max_bit_rate.eq(v)),
             ))
             .execute(&mut conn)?;
@@ -667,7 +676,12 @@ impl ArtistRepository {
 
     /// Search artists by name with pagination.
     /// An empty query returns all artists.
-    pub fn search(&self, query: &str, offset: i64, limit: i64) -> Result<Vec<Artist>, MusicRepoError> {
+    pub fn search(
+        &self,
+        query: &str,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Artist>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         if query.is_empty() {
@@ -791,7 +805,11 @@ impl AlbumRepository {
     }
 
     /// Find albums ordered alphabetically by name with pagination.
-    pub fn find_alphabetical_by_name(&self, offset: i64, limit: i64) -> Result<Vec<Album>, MusicRepoError> {
+    pub fn find_alphabetical_by_name(
+        &self,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Album>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         let results = albums::table
@@ -805,7 +823,11 @@ impl AlbumRepository {
     }
 
     /// Find albums ordered alphabetically by artist name with pagination.
-    pub fn find_alphabetical_by_artist(&self, offset: i64, limit: i64) -> Result<Vec<Album>, MusicRepoError> {
+    pub fn find_alphabetical_by_artist(
+        &self,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Album>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         let results = albums::table
@@ -877,7 +899,13 @@ impl AlbumRepository {
     }
 
     /// Find albums by year range with pagination.
-    pub fn find_by_year_range(&self, from_year: i32, to_year: i32, offset: i64, limit: i64) -> Result<Vec<Album>, MusicRepoError> {
+    pub fn find_by_year_range(
+        &self,
+        from_year: i32,
+        to_year: i32,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Album>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         let results = albums::table
@@ -893,7 +921,12 @@ impl AlbumRepository {
     }
 
     /// Find albums by genre with pagination.
-    pub fn find_by_genre(&self, genre: &str, offset: i64, limit: i64) -> Result<Vec<Album>, MusicRepoError> {
+    pub fn find_by_genre(
+        &self,
+        genre: &str,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Album>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         let results = albums::table
@@ -909,7 +942,12 @@ impl AlbumRepository {
 
     /// Search albums by name with pagination.
     /// An empty query returns all albums.
-    pub fn search(&self, query: &str, offset: i64, limit: i64) -> Result<Vec<Album>, MusicRepoError> {
+    pub fn search(
+        &self,
+        query: &str,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Album>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         if query.is_empty() {
@@ -1086,7 +1124,12 @@ impl SongRepository {
 
     /// Search songs by title with pagination.
     /// An empty query returns all songs.
-    pub fn search(&self, query: &str, offset: i64, limit: i64) -> Result<Vec<Song>, MusicRepoError> {
+    pub fn search(
+        &self,
+        query: &str,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Song>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         if query.is_empty() {
@@ -1457,7 +1500,10 @@ impl StarredRepository {
 
     /// Get all starred artists for a user with their starred timestamp.
     /// Returns (Artist, starred_at).
-    pub fn get_starred_artists(&self, user_id: i32) -> Result<Vec<(Artist, NaiveDateTime)>, MusicRepoError> {
+    pub fn get_starred_artists(
+        &self,
+        user_id: i32,
+    ) -> Result<Vec<(Artist, NaiveDateTime)>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         let results: Vec<(StarredRow, ArtistRow)> = starred::table
@@ -1476,7 +1522,10 @@ impl StarredRepository {
 
     /// Get all starred albums for a user with their starred timestamp.
     /// Returns (Album, starred_at).
-    pub fn get_starred_albums(&self, user_id: i32) -> Result<Vec<(Album, NaiveDateTime)>, MusicRepoError> {
+    pub fn get_starred_albums(
+        &self,
+        user_id: i32,
+    ) -> Result<Vec<(Album, NaiveDateTime)>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         let results: Vec<(StarredRow, AlbumRow)> = starred::table
@@ -1495,7 +1544,10 @@ impl StarredRepository {
 
     /// Get all starred songs for a user with their starred timestamp.
     /// Returns (Song, starred_at).
-    pub fn get_starred_songs(&self, user_id: i32) -> Result<Vec<(Song, NaiveDateTime)>, MusicRepoError> {
+    pub fn get_starred_songs(
+        &self,
+        user_id: i32,
+    ) -> Result<Vec<(Song, NaiveDateTime)>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         let results: Vec<(StarredRow, SongRow)> = starred::table
@@ -1552,7 +1604,11 @@ impl StarredRepository {
     }
 
     /// Get the starred_at timestamp for an artist.
-    pub fn get_starred_at_for_artist(&self, user_id: i32, artist_id: i32) -> Result<Option<NaiveDateTime>, MusicRepoError> {
+    pub fn get_starred_at_for_artist(
+        &self,
+        user_id: i32,
+        artist_id: i32,
+    ) -> Result<Option<NaiveDateTime>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         let result = starred::table
@@ -1566,7 +1622,11 @@ impl StarredRepository {
     }
 
     /// Get the starred_at timestamp for an album.
-    pub fn get_starred_at_for_album(&self, user_id: i32, album_id: i32) -> Result<Option<NaiveDateTime>, MusicRepoError> {
+    pub fn get_starred_at_for_album(
+        &self,
+        user_id: i32,
+        album_id: i32,
+    ) -> Result<Option<NaiveDateTime>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         let result = starred::table
@@ -1580,7 +1640,11 @@ impl StarredRepository {
     }
 
     /// Get the starred_at timestamp for a song.
-    pub fn get_starred_at_for_song(&self, user_id: i32, song_id: i32) -> Result<Option<NaiveDateTime>, MusicRepoError> {
+    pub fn get_starred_at_for_song(
+        &self,
+        user_id: i32,
+        song_id: i32,
+    ) -> Result<Option<NaiveDateTime>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         let result = starred::table
@@ -1595,7 +1659,12 @@ impl StarredRepository {
 
     /// Get starred albums for a user with pagination, ordered by starred_at descending.
     /// Returns albums with their starred_at timestamp.
-    pub fn get_starred_albums_paginated(&self, user_id: i32, offset: i64, limit: i64) -> Result<Vec<(Album, NaiveDateTime)>, MusicRepoError> {
+    pub fn get_starred_albums_paginated(
+        &self,
+        user_id: i32,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<(Album, NaiveDateTime)>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         let results: Vec<(StarredRow, AlbumRow)> = starred::table
@@ -1666,7 +1735,12 @@ impl NowPlayingRepository {
 
     /// Set a song as now playing for a user.
     /// Replaces any existing now playing entry for the user.
-    pub fn set_now_playing(&self, user_id: i32, song_id: i32, player_id: Option<&str>) -> Result<(), MusicRepoError> {
+    pub fn set_now_playing(
+        &self,
+        user_id: i32,
+        song_id: i32,
+        player_id: Option<&str>,
+    ) -> Result<(), MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         // Delete any existing entry for this user
@@ -1705,12 +1779,16 @@ impl NowPlayingRepository {
         let results: Vec<(NowPlayingRow, SongRow, UserRow)> = now_playing::table
             .inner_join(songs::table.on(now_playing::song_id.eq(songs::id)))
             .inner_join(users::table.on(now_playing::user_id.eq(users::id)))
-            .select((NowPlayingRow::as_select(), SongRow::as_select(), UserRow::as_select()))
+            .select((
+                NowPlayingRow::as_select(),
+                SongRow::as_select(),
+                UserRow::as_select(),
+            ))
             .order(now_playing::started_at.desc())
             .load(&mut conn)?;
 
         let now = chrono::Utc::now().naive_utc();
-        
+
         Ok(results
             .into_iter()
             .map(|(np, song, user)| {
@@ -1767,7 +1845,13 @@ impl ScrobbleRepository {
     }
 
     /// Record a scrobble (song play).
-    pub fn scrobble(&self, user_id: i32, song_id: i32, time: Option<i64>, submission: bool) -> Result<(), MusicRepoError> {
+    pub fn scrobble(
+        &self,
+        user_id: i32,
+        song_id: i32,
+        time: Option<i64>,
+        submission: bool,
+    ) -> Result<(), MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         // Determine the played_at timestamp
@@ -1816,7 +1900,11 @@ impl ScrobbleRepository {
     }
 
     /// Get recent scrobbles for a user.
-    pub fn get_recent_scrobbles(&self, user_id: i32, limit: i64) -> Result<Vec<(Song, NaiveDateTime)>, MusicRepoError> {
+    pub fn get_recent_scrobbles(
+        &self,
+        user_id: i32,
+        limit: i64,
+    ) -> Result<Vec<(Song, NaiveDateTime)>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         let results: Vec<(ScrobbleRow, SongRow)> = scrobbles::table
@@ -1878,7 +1966,12 @@ impl RatingRepository {
     }
 
     /// Set rating for a song. Rating of 0 removes the rating.
-    pub fn set_song_rating(&self, user_id: i32, song_id: i32, rating: i32) -> Result<(), MusicRepoError> {
+    pub fn set_song_rating(
+        &self,
+        user_id: i32,
+        song_id: i32,
+        rating: i32,
+    ) -> Result<(), MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         if rating == 0 {
@@ -1925,7 +2018,12 @@ impl RatingRepository {
     }
 
     /// Set rating for an album. Rating of 0 removes the rating.
-    pub fn set_album_rating(&self, user_id: i32, album_id: i32, rating: i32) -> Result<(), MusicRepoError> {
+    pub fn set_album_rating(
+        &self,
+        user_id: i32,
+        album_id: i32,
+        rating: i32,
+    ) -> Result<(), MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         if rating == 0 {
@@ -1968,7 +2066,12 @@ impl RatingRepository {
     }
 
     /// Set rating for an artist. Rating of 0 removes the rating.
-    pub fn set_artist_rating(&self, user_id: i32, artist_id: i32, rating: i32) -> Result<(), MusicRepoError> {
+    pub fn set_artist_rating(
+        &self,
+        user_id: i32,
+        artist_id: i32,
+        rating: i32,
+    ) -> Result<(), MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         if rating == 0 {
@@ -2011,7 +2114,11 @@ impl RatingRepository {
     }
 
     /// Get rating for a song.
-    pub fn get_song_rating(&self, user_id: i32, song_id: i32) -> Result<Option<i32>, MusicRepoError> {
+    pub fn get_song_rating(
+        &self,
+        user_id: i32,
+        song_id: i32,
+    ) -> Result<Option<i32>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         let result = user_ratings::table
@@ -2025,7 +2132,11 @@ impl RatingRepository {
     }
 
     /// Get rating for an album.
-    pub fn get_album_rating(&self, user_id: i32, album_id: i32) -> Result<Option<i32>, MusicRepoError> {
+    pub fn get_album_rating(
+        &self,
+        user_id: i32,
+        album_id: i32,
+    ) -> Result<Option<i32>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         let result = user_ratings::table
@@ -2039,7 +2150,11 @@ impl RatingRepository {
     }
 
     /// Get rating for an artist.
-    pub fn get_artist_rating(&self, user_id: i32, artist_id: i32) -> Result<Option<i32>, MusicRepoError> {
+    pub fn get_artist_rating(
+        &self,
+        user_id: i32,
+        artist_id: i32,
+    ) -> Result<Option<i32>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         let result = user_ratings::table
@@ -2054,7 +2169,12 @@ impl RatingRepository {
 
     /// Get highest rated albums for a user with pagination.
     /// Returns album IDs ordered by rating descending, then by album name.
-    pub fn get_highest_rated_album_ids(&self, user_id: i32, offset: i64, limit: i64) -> Result<Vec<i32>, MusicRepoError> {
+    pub fn get_highest_rated_album_ids(
+        &self,
+        user_id: i32,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<i32>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         let results: Vec<i32> = user_ratings::table
@@ -2152,13 +2272,21 @@ impl PlaylistRepository {
     }
 
     /// Get all playlists for a user (including public playlists from others).
-    pub fn get_playlists(&self, user_id: i32, _username: &str) -> Result<Vec<Playlist>, MusicRepoError> {
+    pub fn get_playlists(
+        &self,
+        user_id: i32,
+        _username: &str,
+    ) -> Result<Vec<Playlist>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         // Get playlists owned by user or public playlists
         let results: Vec<(PlaylistRow, UserRow)> = playlists::table
             .inner_join(users::table.on(playlists::user_id.eq(users::id)))
-            .filter(playlists::user_id.eq(user_id).or(playlists::public.eq(true)))
+            .filter(
+                playlists::user_id
+                    .eq(user_id)
+                    .or(playlists::public.eq(true)),
+            )
             .select((PlaylistRow::as_select(), UserRow::as_select()))
             .order(playlists::name.asc())
             .load(&mut conn)?;
@@ -2393,7 +2521,11 @@ impl PlaylistRepository {
     }
 
     /// Helper to renumber positions after removal.
-    fn renumber_positions(&self, conn: &mut diesel::SqliteConnection, playlist_id: i32) -> Result<(), MusicRepoError> {
+    fn renumber_positions(
+        &self,
+        conn: &mut diesel::SqliteConnection,
+        playlist_id: i32,
+    ) -> Result<(), MusicRepoError> {
         // Get all playlist songs ordered by current position
         let song_ids: Vec<i32> = playlist_songs::table
             .filter(playlist_songs::playlist_id.eq(playlist_id))
@@ -2412,7 +2544,11 @@ impl PlaylistRepository {
     }
 
     /// Helper to update playlist stats (song_count, duration).
-    fn update_playlist_stats(&self, conn: &mut diesel::SqliteConnection, playlist_id: i32) -> Result<(), MusicRepoError> {
+    fn update_playlist_stats(
+        &self,
+        conn: &mut diesel::SqliteConnection,
+        playlist_id: i32,
+    ) -> Result<(), MusicRepoError> {
         // Count songs and sum duration
         let results: Vec<SongRow> = playlist_songs::table
             .inner_join(songs::table.on(playlist_songs::song_id.eq(songs::id)))
@@ -2506,7 +2642,11 @@ impl PlayQueueRepository {
     }
 
     /// Get the play queue for a user.
-    pub fn get_play_queue(&self, user_id: i32, username: &str) -> Result<Option<PlayQueue>, MusicRepoError> {
+    pub fn get_play_queue(
+        &self,
+        user_id: i32,
+        username: &str,
+    ) -> Result<Option<PlayQueue>, MusicRepoError> {
         let mut conn = self.pool.get()?;
 
         // Get the play queue
@@ -2604,8 +2744,10 @@ impl PlayQueueRepository {
         };
 
         // Clear existing songs
-        diesel::delete(play_queue_songs::table.filter(play_queue_songs::play_queue_id.eq(queue_id)))
-            .execute(&mut conn)?;
+        diesel::delete(
+            play_queue_songs::table.filter(play_queue_songs::play_queue_id.eq(queue_id)),
+        )
+        .execute(&mut conn)?;
 
         // Add new songs
         for (pos, song_id) in song_ids.iter().enumerate() {

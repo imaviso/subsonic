@@ -36,7 +36,8 @@ pub struct IdParams {
 /// Returns all configured top-level music folders.
 pub async fn get_music_folders(auth: SubsonicAuth) -> impl IntoResponse {
     let folders = auth.state.get_music_folders();
-    let responses: Vec<MusicFolderResponse> = folders.iter().map(MusicFolderResponse::from).collect();
+    let responses: Vec<MusicFolderResponse> =
+        folders.iter().map(MusicFolderResponse::from).collect();
     ok_music_folders(auth.format, responses)
 }
 
@@ -46,10 +47,10 @@ pub async fn get_music_folders(auth: SubsonicAuth) -> impl IntoResponse {
 /// This is used by older clients that use the folder-based browsing model.
 pub async fn get_indexes(auth: SubsonicAuth) -> impl IntoResponse {
     let artists = auth.state.get_artists();
-    
+
     // Group artists by first letter
     let mut index_map: BTreeMap<String, Vec<ArtistResponse>> = BTreeMap::new();
-    
+
     for artist in &artists {
         let first_char = artist
             .sort_name
@@ -61,37 +62,38 @@ pub async fn get_indexes(auth: SubsonicAuth) -> impl IntoResponse {
             .to_uppercase()
             .next()
             .unwrap_or('#');
-        
+
         let key = if first_char.is_alphabetic() {
             first_char.to_string()
         } else {
             "#".to_string()
         };
-        
+
         index_map
             .entry(key)
             .or_default()
             .push(ArtistResponse::from(artist));
     }
-    
+
     // Convert to response format
     let indexes: Vec<IndexResponse> = index_map
         .into_iter()
         .map(|(name, artists)| IndexResponse { name, artists })
         .collect();
-    
+
     // Get last modified time (using current timestamp for now)
-    let last_modified = auth.state
+    let last_modified = auth
+        .state
         .get_artists_last_modified()
         .map(|dt| dt.and_utc().timestamp_millis())
         .unwrap_or(0);
-    
+
     let response = IndexesResponse {
         ignored_articles: "The El La Los Las Le Les".to_string(),
         last_modified,
         indexes,
     };
-    
+
     ok_indexes(auth.format, response)
 }
 
@@ -101,10 +103,10 @@ pub async fn get_indexes(auth: SubsonicAuth) -> impl IntoResponse {
 /// This is the preferred endpoint for modern clients.
 pub async fn get_artists(auth: SubsonicAuth) -> impl IntoResponse {
     let artists = auth.state.get_artists();
-    
+
     // Group artists by first letter
     let mut index_map: BTreeMap<String, Vec<ArtistID3Response>> = BTreeMap::new();
-    
+
     for artist in &artists {
         let first_char = artist
             .sort_name
@@ -116,33 +118,36 @@ pub async fn get_artists(auth: SubsonicAuth) -> impl IntoResponse {
             .to_uppercase()
             .next()
             .unwrap_or('#');
-        
+
         let key = if first_char.is_alphabetic() {
             first_char.to_string()
         } else {
             "#".to_string()
         };
-        
+
         // Get album count for this artist
         let album_count = auth.state.get_artist_album_count(artist.id);
-        
+
         index_map
             .entry(key)
             .or_default()
-            .push(ArtistID3Response::from_artist(artist, Some(album_count as i32)));
+            .push(ArtistID3Response::from_artist(
+                artist,
+                Some(album_count as i32),
+            ));
     }
-    
+
     // Convert to response format
     let indexes: Vec<IndexID3Response> = index_map
         .into_iter()
         .map(|(name, artists)| IndexID3Response { name, artists })
         .collect();
-    
+
     let response = ArtistsID3Response {
         ignored_articles: "The El La Los Las Le Les".to_string(),
         indexes,
     };
-    
+
     ok_artists(auth.format, response)
 }
 
@@ -158,7 +163,7 @@ pub async fn get_album(
         Some(id) => id,
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("id".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -167,7 +172,7 @@ pub async fn get_album(
         Some(album) => album,
         None => {
             return error_response(auth.format, &ApiError::NotFound("Album".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -184,7 +189,11 @@ pub async fn get_album(
         })
         .collect();
 
-    let response = AlbumWithSongsID3Response::from_album_and_songs_with_starred(&album, song_responses, album_starred_at.as_ref());
+    let response = AlbumWithSongsID3Response::from_album_and_songs_with_starred(
+        &album,
+        song_responses,
+        album_starred_at.as_ref(),
+    );
     ok_album(auth.format, response).into_response()
 }
 
@@ -200,7 +209,7 @@ pub async fn get_artist(
         Some(id) => id,
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("id".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -209,12 +218,14 @@ pub async fn get_artist(
         Some(artist) => artist,
         None => {
             return error_response(auth.format, &ApiError::NotFound("Artist".into()))
-                .into_response()
+                .into_response();
         }
     };
 
     // Get the artist's starred status
-    let artist_starred_at = auth.state.get_starred_at_for_artist(auth.user.id, artist_id);
+    let artist_starred_at = auth
+        .state
+        .get_starred_at_for_artist(auth.user.id, artist_id);
 
     // Get albums for the artist with their starred status
     let albums = auth.state.get_albums_by_artist(artist_id);
@@ -226,7 +237,11 @@ pub async fn get_artist(
         })
         .collect();
 
-    let response = ArtistWithAlbumsID3Response::from_artist_and_albums_with_starred(&artist, album_responses, artist_starred_at.as_ref());
+    let response = ArtistWithAlbumsID3Response::from_artist_and_albums_with_starred(
+        &artist,
+        album_responses,
+        artist_starred_at.as_ref(),
+    );
     ok_artist(auth.format, response).into_response()
 }
 
@@ -242,7 +257,7 @@ pub async fn get_song(
         Some(id) => id,
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("id".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -250,8 +265,7 @@ pub async fn get_song(
     let song = match auth.state.get_song(song_id) {
         Some(song) => song,
         None => {
-            return error_response(auth.format, &ApiError::NotFound("Song".into()))
-                .into_response()
+            return error_response(auth.format, &ApiError::NotFound("Song".into())).into_response();
         }
     };
 
@@ -301,11 +315,11 @@ pub async fn get_album_list2(
         Some(t) => t,
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("type".into()))
-                .into_response()
+                .into_response();
         }
     };
 
-    let size = params.size.unwrap_or(10).min(500).max(1);
+    let size = params.size.unwrap_or(10).clamp(1, 500);
     let offset = params.offset.unwrap_or(0).max(0);
 
     let albums = match list_type {
@@ -318,7 +332,8 @@ pub async fn get_album_list2(
         "byYear" => {
             let from_year = params.from_year.unwrap_or(0);
             let to_year = params.to_year.unwrap_or(9999);
-            auth.state.get_albums_by_year(from_year, to_year, offset, size)
+            auth.state
+                .get_albums_by_year(from_year, to_year, offset, size)
         }
         "byGenre" => {
             let genre = match params.genre.as_deref() {
@@ -328,27 +343,24 @@ pub async fn get_album_list2(
                         auth.format,
                         &ApiError::MissingParameter("genre".into()),
                     )
-                    .into_response()
+                    .into_response();
                 }
             };
             auth.state.get_albums_by_genre(genre, offset, size)
         }
-        "starred" => {
-            auth.state.get_albums_starred(auth.user.id, offset, size)
-        }
-        "highest" => {
-            auth.state.get_albums_highest(auth.user.id, offset, size)
-        }
+        "starred" => auth.state.get_albums_starred(auth.user.id, offset, size),
+        "highest" => auth.state.get_albums_highest(auth.user.id, offset, size),
         _ => {
             return error_response(
                 auth.format,
                 &ApiError::Generic(format!("Unknown list type: {}", list_type)),
             )
-            .into_response()
+            .into_response();
         }
     };
 
-    let album_responses: Vec<AlbumID3Response> = albums.iter().map(AlbumID3Response::from).collect();
+    let album_responses: Vec<AlbumID3Response> =
+        albums.iter().map(AlbumID3Response::from).collect();
     let response = AlbumList2Response {
         albums: album_responses,
     };
@@ -420,27 +432,33 @@ pub async fn search3(
     let raw_query = params.query.as_deref().unwrap_or("");
     let query = raw_query.trim_matches('"').trim();
 
-    let artist_count = params.artist_count.unwrap_or(20).min(500).max(0);
+    let artist_count = params.artist_count.unwrap_or(20).clamp(0, 500);
     let artist_offset = params.artist_offset.unwrap_or(0).max(0);
-    let album_count = params.album_count.unwrap_or(20).min(500).max(0);
+    let album_count = params.album_count.unwrap_or(20).clamp(0, 500);
     let album_offset = params.album_offset.unwrap_or(0).max(0);
-    let song_count = params.song_count.unwrap_or(20).min(500).max(0);
+    let song_count = params.song_count.unwrap_or(20).clamp(0, 500);
     let song_offset = params.song_offset.unwrap_or(0).max(0);
 
     // Search for artists, albums, and songs
-    let artists = auth.state.search_artists(query, artist_offset, artist_count);
+    let artists = auth
+        .state
+        .search_artists(query, artist_offset, artist_count);
     let albums = auth.state.search_albums(query, album_offset, album_count);
     let songs = auth.state.search_songs(query, song_offset, song_count);
 
     // Convert to response types with starred status
     let user_id = auth.user.id;
-    
+
     let artist_responses: Vec<ArtistID3Response> = artists
         .iter()
         .map(|a| {
             let album_count = auth.state.get_artist_album_count(a.id);
             let starred_at = auth.state.get_starred_at_for_artist(user_id, a.id);
-            ArtistID3Response::from_artist_with_starred(a, Some(album_count as i32), starred_at.as_ref())
+            ArtistID3Response::from_artist_with_starred(
+                a,
+                Some(album_count as i32),
+                starred_at.as_ref(),
+            )
         })
         .collect();
 
@@ -499,7 +517,7 @@ pub async fn get_random_songs(
     axum::extract::Query(params): axum::extract::Query<RandomSongsParams>,
     auth: SubsonicAuth,
 ) -> impl IntoResponse {
-    let size = params.size.unwrap_or(10).min(500).max(1);
+    let size = params.size.unwrap_or(10).clamp(1, 500);
     let user_id = auth.user.id;
 
     let songs = auth.state.get_random_songs(
@@ -551,20 +569,17 @@ pub async fn get_songs_by_genre(
         Some(g) => g,
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("genre".into()))
-                .into_response()
+                .into_response();
         }
     };
 
-    let count = params.count.unwrap_or(10).min(500).max(1);
+    let count = params.count.unwrap_or(10).clamp(1, 500);
     let offset = params.offset.unwrap_or(0).max(0);
     let user_id = auth.user.id;
 
-    let songs = auth.state.get_songs_by_genre(
-        genre,
-        count,
-        offset,
-        params.music_folder_id,
-    );
+    let songs = auth
+        .state
+        .get_songs_by_genre(genre, count, offset, params.music_folder_id);
 
     let song_responses: Vec<ChildResponse> = songs
         .iter()
@@ -611,7 +626,7 @@ pub async fn get_artist_info2(
         Some(id) => id,
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("id".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -620,7 +635,7 @@ pub async fn get_artist_info2(
         Some(artist) => artist,
         None => {
             return error_response(auth.format, &ApiError::NotFound("Artist".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -650,7 +665,7 @@ pub async fn get_album_info2(
         Some(id) => id,
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("id".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -659,7 +674,7 @@ pub async fn get_album_info2(
         Some(album) => album,
         None => {
             return error_response(auth.format, &ApiError::NotFound("Album".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -691,11 +706,11 @@ pub async fn get_similar_songs2(
         Some(id) => id,
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("id".into()))
-                .into_response()
+                .into_response();
         }
     };
 
-    let count = params.count.unwrap_or(50).min(500).max(1);
+    let count = params.count.unwrap_or(50).clamp(1, 500);
     let user_id = auth.user.id;
 
     // Try to get similar songs - first check if it's a song
@@ -720,8 +735,7 @@ pub async fn get_similar_songs2(
         // Get random songs from this artist
         auth.state.get_similar_songs_by_artist(id, -1, count)
     } else {
-        return error_response(auth.format, &ApiError::NotFound("Item".into()))
-            .into_response();
+        return error_response(auth.format, &ApiError::NotFound("Item".into())).into_response();
     };
 
     let song_responses: Vec<ChildResponse> = songs
@@ -761,11 +775,11 @@ pub async fn get_top_songs(
         Some(name) if !name.is_empty() => name,
         _ => {
             return error_response(auth.format, &ApiError::MissingParameter("artist".into()))
-                .into_response()
+                .into_response();
         }
     };
 
-    let count = params.count.unwrap_or(50).min(500).max(1);
+    let count = params.count.unwrap_or(50).clamp(1, 500);
     let user_id = auth.user.id;
 
     // Get top songs by artist name (ordered by play count)
@@ -804,7 +818,7 @@ pub async fn get_music_directory(
         Some(id) => id,
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("id".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -856,11 +870,11 @@ pub async fn get_album_list(
         Some(t) => t,
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("type".into()))
-                .into_response()
+                .into_response();
         }
     };
 
-    let size = params.size.unwrap_or(10).min(500).max(1);
+    let size = params.size.unwrap_or(10).clamp(1, 500);
     let offset = params.offset.unwrap_or(0).max(0);
 
     let albums = match list_type {
@@ -873,7 +887,8 @@ pub async fn get_album_list(
         "byYear" => {
             let from_year = params.from_year.unwrap_or(0);
             let to_year = params.to_year.unwrap_or(9999);
-            auth.state.get_albums_by_year(from_year, to_year, offset, size)
+            auth.state
+                .get_albums_by_year(from_year, to_year, offset, size)
         }
         "byGenre" => {
             let genre = match params.genre.as_deref() {
@@ -883,7 +898,7 @@ pub async fn get_album_list(
                         auth.format,
                         &ApiError::MissingParameter("genre".into()),
                     )
-                    .into_response()
+                    .into_response();
                 }
             };
             auth.state.get_albums_by_genre(genre, offset, size)
@@ -895,7 +910,7 @@ pub async fn get_album_list(
                 auth.format,
                 &ApiError::Generic(format!("Unknown list type: {}", list_type)),
             )
-            .into_response()
+            .into_response();
         }
     };
 
@@ -926,7 +941,9 @@ pub async fn get_starred(auth: SubsonicAuth) -> impl IntoResponse {
     // Convert to response types
     let artist_responses: Vec<ArtistResponse> = starred_artists
         .iter()
-        .map(|(artist, starred_at)| ArtistResponse::from_artist_with_starred(artist, Some(starred_at)))
+        .map(|(artist, starred_at)| {
+            ArtistResponse::from_artist_with_starred(artist, Some(starred_at))
+        })
         .collect();
 
     let album_responses: Vec<ChildResponse> = starred_albums
@@ -991,15 +1008,17 @@ pub async fn search2(
     let raw_query = params.query.as_deref().unwrap_or("");
     let query = raw_query.trim_matches('"').trim();
 
-    let artist_count = params.artist_count.unwrap_or(20).min(500).max(0);
+    let artist_count = params.artist_count.unwrap_or(20).clamp(0, 500);
     let artist_offset = params.artist_offset.unwrap_or(0).max(0);
-    let album_count = params.album_count.unwrap_or(20).min(500).max(0);
+    let album_count = params.album_count.unwrap_or(20).clamp(0, 500);
     let album_offset = params.album_offset.unwrap_or(0).max(0);
-    let song_count = params.song_count.unwrap_or(20).min(500).max(0);
+    let song_count = params.song_count.unwrap_or(20).clamp(0, 500);
     let song_offset = params.song_offset.unwrap_or(0).max(0);
 
     // Search for artists, albums, and songs
-    let artists = auth.state.search_artists(query, artist_offset, artist_count);
+    let artists = auth
+        .state
+        .search_artists(query, artist_offset, artist_count);
     let albums = auth.state.search_albums(query, album_offset, album_count);
     let songs = auth.state.search_songs(query, song_offset, song_count);
 
@@ -1069,7 +1088,7 @@ pub async fn search(
     axum::extract::Query(params): axum::extract::Query<SearchParams>,
     auth: SubsonicAuth,
 ) -> impl IntoResponse {
-    let count = params.count.unwrap_or(20).min(500).max(0);
+    let count = params.count.unwrap_or(20).clamp(0, 500);
     let offset = params.offset.unwrap_or(0).max(0);
 
     // Use 'any' field for general search, or combine artist/album/title
@@ -1109,7 +1128,7 @@ pub async fn get_artist_info(
         Some(id) => id,
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("id".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -1118,7 +1137,7 @@ pub async fn get_artist_info(
         Some(artist) => artist,
         None => {
             return error_response(auth.format, &ApiError::NotFound("Artist".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -1138,7 +1157,7 @@ pub async fn get_album_info(
         Some(id) => id,
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("id".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -1147,7 +1166,7 @@ pub async fn get_album_info(
         Some(album) => album,
         None => {
             return error_response(auth.format, &ApiError::NotFound("Album".into()))
-                .into_response()
+                .into_response();
         }
     };
 
@@ -1168,11 +1187,11 @@ pub async fn get_similar_songs(
         Some(id) => id,
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("id".into()))
-                .into_response()
+                .into_response();
         }
     };
 
-    let count = params.count.unwrap_or(50).min(500).max(1);
+    let count = params.count.unwrap_or(50).clamp(1, 500);
     let user_id = auth.user.id;
 
     // Try to get similar songs
@@ -1257,7 +1276,7 @@ pub async fn get_lyrics_by_song_id(
         Some(id) => id,
         None => {
             return error_response(auth.format, &ApiError::MissingParameter("id".into()))
-                .into_response()
+                .into_response();
         }
     };
 

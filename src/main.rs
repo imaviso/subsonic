@@ -2,18 +2,17 @@
 
 use std::sync::Arc;
 
-use axum::{
-    extract::FromRef,
-    Router,
-};
+use axum::{Router, extract::FromRef};
 use clap::{Parser, Subcommand};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use subsonic::api::{handlers, AuthState, DatabaseAuthState, SubsonicRouterExt};
+use subsonic::api::{AuthState, DatabaseAuthState, SubsonicRouterExt, handlers};
 use subsonic::crypto::hash_password;
-use subsonic::db::{run_migrations, DbConfig, DbPool, MusicFolderRepository, NewUser, UserRepository};
+use subsonic::db::{
+    DbConfig, DbPool, MusicFolderRepository, NewUser, UserRepository, run_migrations,
+};
 use subsonic::models::music::NewMusicFolder;
 use subsonic::scanner::{AutoScanner, ScanMode, ScanState, Scanner};
 
@@ -146,7 +145,10 @@ fn create_router(state: AppState) -> Router {
         // System endpoints
         .subsonic_route("/ping", handlers::ping)
         .subsonic_route("/getLicense", handlers::get_license)
-        .subsonic_route("/getOpenSubsonicExtensions", handlers::get_open_subsonic_extensions)
+        .subsonic_route(
+            "/getOpenSubsonicExtensions",
+            handlers::get_open_subsonic_extensions,
+        )
         .subsonic_route("/tokenInfo", handlers::token_info)
         // Bookmarks endpoints
         .subsonic_route("/getBookmarks", handlers::get_bookmarks)
@@ -215,10 +217,12 @@ fn create_router(state: AppState) -> Router {
 
     Router::new()
         .nest("/rest", rest_routes)
-        .layer(CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any))
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        )
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -234,7 +238,12 @@ fn setup_database(database_url: &str) -> DbPool {
     pool
 }
 
-fn create_user(pool: &DbPool, username: &str, password: &str, admin: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn create_user(
+    pool: &DbPool,
+    username: &str,
+    password: &str,
+    admin: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let password_hash = hash_password(password)?;
     let repo = UserRepository::new(pool.clone());
 
@@ -246,7 +255,10 @@ fn create_user(pool: &DbPool, username: &str, password: &str, admin: bool) -> Re
 
     match repo.create(&new_user) {
         Ok(user) => {
-            println!("Created user '{}' (id: {}, admin: {})", user.username, user.id, admin);
+            println!(
+                "Created user '{}' (id: {}, admin: {})",
+                user.username, user.id, admin
+            );
             Ok(())
         }
         Err(e) => {
@@ -273,26 +285,28 @@ async fn main() {
     let pool = setup_database(&cli.database);
 
     match cli.command {
-        Some(Commands::CreateUser { username, password, admin }) => {
-            if let Err(_) = create_user(&pool, &username, &password, admin) {
+        Some(Commands::CreateUser {
+            username,
+            password,
+            admin,
+        }) => {
+            if create_user(&pool, &username, &password, admin).is_err() {
                 std::process::exit(1);
             }
         }
         Some(Commands::GenerateApiKey { username }) => {
             let repo = UserRepository::new(pool.clone());
             match repo.find_by_username(&username) {
-                Ok(Some(user)) => {
-                    match repo.generate_api_key(user.id) {
-                        Ok(api_key) => {
-                            println!("Generated API key for user '{}':", username);
-                            println!("{}", api_key);
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to generate API key: {}", e);
-                            std::process::exit(1);
-                        }
+                Ok(Some(user)) => match repo.generate_api_key(user.id) {
+                    Ok(api_key) => {
+                        println!("Generated API key for user '{}':", username);
+                        println!("{}", api_key);
                     }
-                }
+                    Err(e) => {
+                        eprintln!("Failed to generate API key: {}", e);
+                        std::process::exit(1);
+                    }
+                },
                 Ok(None) => {
                     eprintln!("User '{}' not found", username);
                     std::process::exit(1);
@@ -306,21 +320,19 @@ async fn main() {
         Some(Commands::RevokeApiKey { username }) => {
             let repo = UserRepository::new(pool.clone());
             match repo.find_by_username(&username) {
-                Ok(Some(user)) => {
-                    match repo.revoke_api_key(user.id) {
-                        Ok(true) => {
-                            println!("Revoked API key for user '{}'", username);
-                        }
-                        Ok(false) => {
-                            eprintln!("User '{}' not found", username);
-                            std::process::exit(1);
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to revoke API key: {}", e);
-                            std::process::exit(1);
-                        }
+                Ok(Some(user)) => match repo.revoke_api_key(user.id) {
+                    Ok(true) => {
+                        println!("Revoked API key for user '{}'", username);
                     }
-                }
+                    Ok(false) => {
+                        eprintln!("User '{}' not found", username);
+                        std::process::exit(1);
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to revoke API key: {}", e);
+                        std::process::exit(1);
+                    }
+                },
                 Ok(None) => {
                     eprintln!("User '{}' not found", username);
                     std::process::exit(1);
@@ -334,18 +346,16 @@ async fn main() {
         Some(Commands::ShowApiKey { username }) => {
             let repo = UserRepository::new(pool.clone());
             match repo.find_by_username(&username) {
-                Ok(Some(user)) => {
-                    match user.api_key {
-                        Some(api_key) => {
-                            println!("API key for user '{}':", username);
-                            println!("{}", api_key);
-                        }
-                        None => {
-                            println!("User '{}' has no API key. Generate one with:", username);
-                            println!("  subsonic generate-api-key --username {}", username);
-                        }
+                Ok(Some(user)) => match user.api_key {
+                    Some(api_key) => {
+                        println!("API key for user '{}':", username);
+                        println!("{}", api_key);
                     }
-                }
+                    None => {
+                        println!("User '{}' has no API key. Generate one with:", username);
+                        println!("  subsonic generate-api-key --username {}", username);
+                    }
+                },
                 Ok(None) => {
                     eprintln!("User '{}' not found", username);
                     std::process::exit(1);
@@ -380,8 +390,15 @@ async fn main() {
                     } else {
                         println!("Music folders:");
                         for folder in folders {
-                            let status = if folder.enabled { "enabled" } else { "disabled" };
-                            println!("  [{}] {} - {} ({})", folder.id, folder.name, folder.path, status);
+                            let status = if folder.enabled {
+                                "enabled"
+                            } else {
+                                "disabled"
+                            };
+                            println!(
+                                "  [{}] {} - {} ({})",
+                                folder.id, folder.name, folder.path, status
+                            );
                         }
                     }
                 }
@@ -409,8 +426,12 @@ async fn main() {
         }
         Some(Commands::Scan { folder, full }) => {
             let scanner = Scanner::new(pool.clone());
-            let mode = if full { ScanMode::Full } else { ScanMode::Incremental };
-            
+            let mode = if full {
+                ScanMode::Full
+            } else {
+                ScanMode::Incremental
+            };
+
             let result = if let Some(folder_id) = folder {
                 scanner.scan_folder_by_id_with_mode(folder_id, mode)
             } else {
@@ -436,7 +457,10 @@ async fn main() {
                 }
             }
         }
-        Some(Commands::Serve { auto_scan, auto_scan_interval }) => {
+        Some(Commands::Serve {
+            auto_scan,
+            auto_scan_interval,
+        }) => {
             run_server(pool, cli.port, auto_scan, auto_scan_interval).await;
         }
         None => {
@@ -461,7 +485,10 @@ async fn run_server(pool: DbPool, port: u16, auto_scan: bool, auto_scan_interval
     let _auto_scan_handle = if auto_scan {
         let scan_state = Arc::new(ScanState::new());
         let mut auto_scanner = AutoScanner::with_interval(pool, scan_state, auto_scan_interval);
-        tracing::info!("Auto-scan enabled with interval {} seconds", auto_scan_interval);
+        tracing::info!(
+            "Auto-scan enabled with interval {} seconds",
+            auto_scan_interval
+        );
         Some(auto_scanner.start())
     } else {
         None
@@ -469,7 +496,10 @@ async fn run_server(pool: DbPool, port: u16, auto_scan: bool, auto_scan_interval
 
     let addr = format!("0.0.0.0:{}", port);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    tracing::info!("Subsonic server listening on {}", listener.local_addr().unwrap());
+    tracing::info!(
+        "Subsonic server listening on {}",
+        listener.local_addr().unwrap()
+    );
 
     axum::serve(listener, app).await.unwrap();
 }

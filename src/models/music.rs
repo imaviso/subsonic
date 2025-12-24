@@ -110,7 +110,11 @@ impl ArtistID3Response {
         }
     }
 
-    pub fn from_artist_with_starred(artist: &Artist, album_count: Option<i32>, starred_at: Option<&NaiveDateTime>) -> Self {
+    pub fn from_artist_with_starred(
+        artist: &Artist,
+        album_count: Option<i32>,
+        starred_at: Option<&NaiveDateTime>,
+    ) -> Self {
         Self {
             id: artist.id.to_string(),
             name: artist.name.clone(),
@@ -183,7 +187,10 @@ impl From<&Album> for AlbumID3Response {
             song_count: album.song_count,
             duration: album.duration,
             play_count: Some(album.play_count),
-            created: album.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+            created: album
+                .created_at
+                .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                .to_string(),
             starred: None,
             year: album.year,
             genre: album.genre.clone(),
@@ -202,7 +209,10 @@ impl AlbumID3Response {
             song_count: album.song_count,
             duration: album.duration,
             play_count: Some(album.play_count),
-            created: album.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+            created: album
+                .created_at
+                .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                .to_string(),
             starred: starred_at.map(|dt| dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()),
             year: album.year,
             genre: album.genre.clone(),
@@ -445,7 +455,10 @@ impl AlbumWithSongsID3Response {
             song_count: album.song_count,
             duration: album.duration,
             play_count: Some(album.play_count),
-            created: album.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+            created: album
+                .created_at
+                .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                .to_string(),
             starred: None,
             year: album.year,
             genre: album.genre.clone(),
@@ -453,7 +466,11 @@ impl AlbumWithSongsID3Response {
         }
     }
 
-    pub fn from_album_and_songs_with_starred(album: &Album, songs: Vec<ChildResponse>, starred_at: Option<&NaiveDateTime>) -> Self {
+    pub fn from_album_and_songs_with_starred(
+        album: &Album,
+        songs: Vec<ChildResponse>,
+        starred_at: Option<&NaiveDateTime>,
+    ) -> Self {
         Self {
             id: album.id.to_string(),
             name: album.name.clone(),
@@ -463,7 +480,10 @@ impl AlbumWithSongsID3Response {
             song_count: album.song_count,
             duration: album.duration,
             play_count: Some(album.play_count),
-            created: album.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+            created: album
+                .created_at
+                .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                .to_string(),
             starred: starred_at.map(|dt| dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()),
             year: album.year,
             genre: album.genre.clone(),
@@ -510,7 +530,11 @@ impl ArtistWithAlbumsID3Response {
         }
     }
 
-    pub fn from_artist_and_albums_with_starred(artist: &Artist, albums: Vec<AlbumID3Response>, starred_at: Option<&NaiveDateTime>) -> Self {
+    pub fn from_artist_and_albums_with_starred(
+        artist: &Artist,
+        albums: Vec<AlbumID3Response>,
+        starred_at: Option<&NaiveDateTime>,
+    ) -> Self {
         Self {
             id: artist.id.to_string(),
             name: artist.name.clone(),
@@ -770,7 +794,11 @@ pub struct StarredArtistID3Response {
 }
 
 impl StarredArtistID3Response {
-    pub fn from_artist_and_starred(artist: &Artist, album_count: Option<i32>, starred_at: &chrono::NaiveDateTime) -> Self {
+    pub fn from_artist_and_starred(
+        artist: &Artist,
+        album_count: Option<i32>,
+        starred_at: &chrono::NaiveDateTime,
+    ) -> Self {
         Self {
             id: artist.id.to_string(),
             name: artist.name.clone(),
@@ -824,7 +852,10 @@ impl StarredAlbumID3Response {
             song_count: album.song_count,
             duration: album.duration,
             play_count: Some(album.play_count),
-            created: album.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+            created: album
+                .created_at
+                .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                .to_string(),
             starred: starred_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
             year: album.year,
             genre: album.genre.clone(),
@@ -898,7 +929,12 @@ pub struct NowPlayingEntryResponse {
 }
 
 impl NowPlayingEntryResponse {
-    pub fn from_now_playing(song: &Song, username: String, minutes_ago: i32, player_id: Option<String>) -> Self {
+    pub fn from_now_playing(
+        song: &Song,
+        username: String,
+        minutes_ago: i32,
+        player_id: Option<String>,
+    ) -> Self {
         Self {
             id: song.id.to_string(),
             parent: song.album_id.map(|id| id.to_string()),
@@ -1284,7 +1320,12 @@ impl ChildResponse {
             path: None,
             play_count: None,
             disc_number: None,
-            created: Some(artist.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()),
+            created: Some(
+                artist
+                    .created_at
+                    .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                    .to_string(),
+            ),
             album_id: None,
             artist_id: Some(artist.id.to_string()),
             media_type: None,
@@ -1316,7 +1357,12 @@ impl ChildResponse {
             path: None,
             play_count: Some(album.play_count),
             disc_number: None,
-            created: Some(album.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()),
+            created: Some(
+                album
+                    .created_at
+                    .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                    .to_string(),
+            ),
             album_id: Some(album.id.to_string()),
             artist_id: album.artist_id.map(|id| id.to_string()),
             media_type: None,
@@ -1353,7 +1399,10 @@ pub struct StarredResponse {
 
 impl ArtistResponse {
     /// Create an artist response with starred timestamp.
-    pub fn from_artist_with_starred(artist: &Artist, starred_at: Option<&chrono::NaiveDateTime>) -> Self {
+    pub fn from_artist_with_starred(
+        artist: &Artist,
+        starred_at: Option<&chrono::NaiveDateTime>,
+    ) -> Self {
         Self {
             id: artist.id.to_string(),
             name: artist.name.clone(),

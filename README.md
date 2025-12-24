@@ -2,6 +2,8 @@
 
 A lightweight, self-hosted music streaming server implementing the [Subsonic API](http://www.subsonic.org/pages/api.jsp) and [OpenSubsonic](https://opensubsonic.netlify.app/) extensions, written in Rust.
 
+> **Note**: This is a personal use project built to fit specific needs. As a result, not all endpoints from the full Subsonic API specification are implemented. It includes the most commonly used features for streaming music and managing libraries. For production use cases requiring comprehensive API coverage, consider using [Navidrome](https://www.navidrome.org/) or other established Subsonic implementations.
+
 ## Features
 
 - **Subsonic API Compatible** - Works with any Subsonic-compatible client (DSub, Symfonium, Submariner, etc.)

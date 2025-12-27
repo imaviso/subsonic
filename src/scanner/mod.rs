@@ -12,6 +12,7 @@ use std::time::{Duration, UNIX_EPOCH};
 
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::tag::{Accessor, ItemKey};
+use rayon::prelude::*;
 use thiserror::Error;
 use tokio::sync::watch;
 use walkdir::WalkDir;
@@ -39,6 +40,15 @@ pub enum ScanError {
 const AUDIO_EXTENSIONS: &[&str] = &[
     "mp3", "flac", "ogg", "opus", "m4a", "aac", "wav", "wma", "aiff", "ape", "wv",
 ];
+
+/// Common cover art filenames to look for in album directories.
+/// These are tried in order of preference.
+const COVER_ART_FILENAMES: &[&str] = &[
+    "cover", "folder", "front", "album", "albumart", "albumartsmall", "thumb", "art",
+];
+
+/// Supported image file extensions for external cover art.
+const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "bmp", "webp"];
 
 /// Metadata extracted from an audio file.
 #[derive(Debug, Clone)]
@@ -236,6 +246,71 @@ impl Scanner {
     /// Get the cover art cache directory path.
     pub fn cover_art_dir(&self) -> &Path {
         &self.cover_art_dir
+    }
+
+    /// Look for external cover art file in the given directory.
+    /// Tries common filenames like cover.jpg, folder.png, etc.
+    /// Returns the cover art data and MIME type if found.
+    fn find_external_cover_art(&self, dir: &Path) -> Option<(Vec<u8>, String)> {
+        // Try each common filename with each supported extension
+        for filename in COVER_ART_FILENAMES {
+            for ext in IMAGE_EXTENSIONS {
+                let path = dir.join(format!("{}.{}", filename, ext));
+                if path.exists() && path.is_file() {
+                    if let Ok(data) = fs::read(&path) {
+                        let mime = match *ext {
+                            "jpg" | "jpeg" => "image/jpeg",
+                            "png" => "image/png",
+                            "gif" => "image/gif",
+                            "bmp" => "image/bmp",
+                            "webp" => "image/webp",
+                            _ => "image/jpeg",
+                        };
+                        return Some((data, mime.to_string()));
+                    }
+                }
+            }
+        }
+
+        // Also try case-insensitive matching as a fallback
+        // Some albums might have "Cover.JPG" or "FOLDER.PNG"
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if !path.is_file() {
+                    continue;
+                }
+
+                let filename = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.to_lowercase());
+                let ext = path
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.to_lowercase());
+
+                if let (Some(name), Some(extension)) = (filename, ext) {
+                    if COVER_ART_FILENAMES.contains(&name.as_str())
+                        && IMAGE_EXTENSIONS.contains(&extension.as_str())
+                    {
+                        if let Ok(data) = fs::read(&path) {
+                            let mime = match extension.as_str() {
+                                "jpg" | "jpeg" => "image/jpeg",
+                                "png" => "image/png",
+                                "gif" => "image/gif",
+                                "bmp" => "image/bmp",
+                                "webp" => "image/webp",
+                                _ => "image/jpeg",
+                            };
+                            return Some((data, mime.to_string()));
+                        }
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     /// Scan all enabled music folders (full scan).
@@ -448,59 +523,68 @@ impl Scanner {
     }
 
     /// Discover all audio files in a directory, also returning the set of discovered paths.
+    /// Uses parallel processing for metadata reading.
     fn discover_tracks_with_paths(
         &self,
         folder_path: &Path,
         folder: &MusicFolder,
     ) -> Result<(Vec<ScannedTrack>, HashSet<String>), ScanError> {
-        let mut tracks = Vec::new();
-        let mut paths = HashSet::new();
-
-        for entry in WalkDir::new(folder_path)
+        // First, collect all audio file paths (fast, sequential walk)
+        let audio_files: Vec<PathBuf> = WalkDir::new(folder_path)
             .follow_links(true)
             .into_iter()
             .filter_map(|e| e.ok())
-        {
-            let path = entry.path();
+            .filter(|entry| entry.path().is_file())
+            .filter_map(|entry| {
+                let path = entry.into_path();
+                let ext = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.to_lowercase());
 
-            // Skip directories
-            if !path.is_file() {
-                continue;
-            }
-
-            // Check extension
-            let extension = path
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(|e| e.to_lowercase());
-
-            let extension = match extension {
-                Some(ext) if AUDIO_EXTENSIONS.contains(&ext.as_str()) => ext,
-                _ => continue,
-            };
-
-            let path_str = path.to_string_lossy().to_string();
-            paths.insert(path_str);
-
-            // Try to read metadata
-            match self.read_track_metadata(path, &extension, folder) {
-                Ok(track) => tracks.push(track),
-                Err(e) => {
-                    eprintln!("  Warning: Failed to read {}: {}", path.display(), e);
+                match ext {
+                    Some(ext) if AUDIO_EXTENSIONS.contains(&ext.as_str()) => Some(path),
+                    _ => None,
                 }
-            }
-        }
+            })
+            .collect();
+
+        // Build paths set
+        let paths: HashSet<String> = audio_files
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect();
+
+        // Read metadata in parallel using rayon
+        let folder_path_str = folder.path.clone();
+        let tracks: Vec<ScannedTrack> = audio_files
+            .par_iter()
+            .filter_map(|path| {
+                let extension = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.to_lowercase())
+                    .unwrap_or_default();
+
+                match Self::read_track_metadata_static(path, &extension, &folder_path_str) {
+                    Ok(track) => Some(track),
+                    Err(e) => {
+                        eprintln!("  Warning: Failed to read {}: {}", path.display(), e);
+                        None
+                    }
+                }
+            })
+            .collect();
 
         Ok((tracks, paths))
     }
 
-    /// Read metadata from a single audio file.
-    fn read_track_metadata(
-        &self,
+    /// Static version of read_track_metadata for use with rayon (no &self needed).
+    fn read_track_metadata_static(
         path: &Path,
         extension: &str,
-        folder: &MusicFolder,
-    ) -> Result<ScannedTrack, Box<dyn std::error::Error>> {
+        folder_path: &str,
+    ) -> Result<ScannedTrack, Box<dyn std::error::Error + Send + Sync>> {
         let metadata = fs::metadata(path)?;
         let file_size = metadata.len();
 
@@ -515,7 +599,7 @@ impl Scanner {
         let parent_path = path
             .parent()
             .map(|p| {
-                p.strip_prefix(&folder.path)
+                p.strip_prefix(folder_path)
                     .unwrap_or(p)
                     .to_string_lossy()
                     .to_string()
@@ -649,20 +733,115 @@ impl Scanner {
 
         let mut conn = self.pool.get().map_err(MusicRepoError::Pool)?;
 
-        // Cache for artists and albums to avoid duplicate lookups
-        let mut artist_cache: HashMap<String, i32> = HashMap::new();
-        let mut album_cache: HashMap<(String, Option<i32>), i32> = HashMap::new();
-        // Cache album cover art hashes (None = no cover art, Some(hash) = has cover art)
-        let mut album_cover_art_cache: HashMap<i32, Option<String>> = HashMap::new();
+        // Pre-load all existing artists into cache (much faster than individual lookups)
+        let mut artist_cache: HashMap<String, i32> = artists::table
+            .select((artists::name, artists::id))
+            .load::<(String, i32)>(&mut conn)
+            .map_err(MusicRepoError::Database)?
+            .into_iter()
+            .collect();
+
+        // Pre-load all existing albums into cache
+        let mut album_cache: HashMap<(String, Option<i32>), i32> = albums::table
+            .select((albums::name, albums::artist_id, albums::id))
+            .load::<(String, Option<i32>, i32)>(&mut conn)
+            .map_err(MusicRepoError::Database)?
+            .into_iter()
+            .map(|(name, artist_id, id)| ((name, artist_id), id))
+            .collect();
+
+        // Pre-load album cover art hashes
+        let mut album_cover_art_cache: HashMap<i32, Option<String>> = albums::table
+            .select((albums::id, albums::cover_art))
+            .load::<(i32, Option<String>)>(&mut conn)
+            .map_err(MusicRepoError::Database)?
+            .into_iter()
+            .collect();
+
+        // Cache for external cover art per directory (None = already checked, no cover art found)
+        let mut dir_cover_art_cache: HashMap<PathBuf, Option<(Vec<u8>, String)>> = HashMap::new();
 
         let mut artists_added = 0;
         let mut albums_added = 0;
         let mut tracks_added = 0;
         let mut tracks_updated = 0;
         let mut tracks_skipped = 0;
-        let mut tracks_failed = 0;
+        let tracks_failed = 0;
         let mut cover_art_saved = 0;
 
+        // Collect unique new artists and albums first (avoid duplicate inserts)
+        let mut new_artists: HashSet<String> = HashSet::new();
+
+        // First pass: collect all unique new artists
+        for track in &tracks {
+            let path_str = track.path.to_string_lossy().to_string();
+
+            // Skip unchanged files in incremental mode
+            if mode == ScanMode::Incremental
+                && let Some((_, stored_mtime)) = existing_songs.get(&path_str)
+                && let (Some(stored), Some(current)) = (stored_mtime, track.file_modified_at)
+                && *stored == current
+            {
+                continue;
+            }
+
+            let artist_name = track
+                .album_artist
+                .as_ref()
+                .or(track.artist.as_ref())
+                .cloned();
+
+            if let Some(ref name) = artist_name {
+                if !artist_cache.contains_key(name) {
+                    new_artists.insert(name.clone());
+                }
+            }
+        }
+
+        // Batch insert new artists in a transaction
+        if !new_artists.is_empty() {
+            conn.transaction::<_, diesel::result::Error, _>(|conn| {
+                for name in &new_artists {
+                    diesel::insert_into(artists::table)
+                        .values(artists::name.eq(name))
+                        .on_conflict_do_nothing()
+                        .execute(conn)?;
+                }
+                Ok(())
+            })
+            .map_err(MusicRepoError::Database)?;
+
+            // Reload artist cache to get new IDs
+            let new_artist_ids: Vec<(String, i32)> = artists::table
+                .filter(artists::name.eq_any(&new_artists))
+                .select((artists::name, artists::id))
+                .load(&mut conn)
+                .map_err(MusicRepoError::Database)?;
+
+            for (name, id) in new_artist_ids {
+                if !artist_cache.contains_key(&name) {
+                    artists_added += 1;
+                }
+                artist_cache.insert(name, id);
+            }
+        }
+
+        // Batch size for song inserts (SQLite has a limit of ~999 variables per query)
+        const BATCH_SIZE: usize = 100;
+
+        // Prepare tracks to process
+        struct PreparedTrack {
+            track: ScannedTrack,
+            path_str: String,
+            artist_id: Option<i32>,
+            album_id: Option<i32>,
+            cover_art: Option<String>,
+            is_update: bool,
+        }
+
+        let mut prepared_tracks: Vec<PreparedTrack> = Vec::with_capacity(tracks.len());
+
+        // Second pass: resolve albums and prepare tracks
         for track in tracks {
             let path_str = track.path.to_string_lossy().to_string();
 
@@ -680,49 +859,14 @@ impl Scanner {
                 continue;
             }
 
-            // Get or create artist
+            // Get artist ID from cache
             let artist_name = track
                 .album_artist
                 .as_ref()
                 .or(track.artist.as_ref())
                 .cloned();
 
-            let artist_id = if let Some(ref name) = artist_name {
-                if let Some(&id) = artist_cache.get(name) {
-                    Some(id)
-                } else {
-                    // Look up or create artist
-                    let existing: Option<i32> = artists::table
-                        .filter(artists::name.eq(name))
-                        .select(artists::id)
-                        .first(&mut conn)
-                        .optional()
-                        .map_err(MusicRepoError::Database)?;
-
-                    let id = if let Some(id) = existing {
-                        id
-                    } else {
-                        // Insert new artist
-                        diesel::insert_into(artists::table)
-                            .values((artists::name.eq(name),))
-                            .execute(&mut conn)
-                            .map_err(MusicRepoError::Database)?;
-
-                        artists_added += 1;
-
-                        artists::table
-                            .filter(artists::name.eq(name))
-                            .select(artists::id)
-                            .first(&mut conn)
-                            .map_err(MusicRepoError::Database)?
-                    };
-
-                    artist_cache.insert(name.clone(), id);
-                    Some(id)
-                }
-            } else {
-                None
-            };
+            let artist_id = artist_name.as_ref().and_then(|name| artist_cache.get(name).copied());
 
             // Get or create album
             let album_id = if let Some(ref album_name) = track.album {
@@ -731,187 +875,194 @@ impl Scanner {
                 if let Some(&id) = album_cache.get(&cache_key) {
                     Some(id)
                 } else {
-                    // Look up or create album
+                    // Insert new album
+                    diesel::insert_into(albums::table)
+                        .values((
+                            albums::name.eq(album_name),
+                            albums::artist_id.eq(artist_id),
+                            albums::artist_name.eq(&artist_name),
+                            albums::year.eq(track.year.map(|y| y as i32)),
+                            albums::genre.eq(&track.genre),
+                        ))
+                        .on_conflict_do_nothing()
+                        .execute(&mut conn)
+                        .map_err(MusicRepoError::Database)?;
+
+                    // Get the album ID
                     let mut query = albums::table
                         .filter(albums::name.eq(album_name))
                         .into_boxed();
-
                     if let Some(aid) = artist_id {
                         query = query.filter(albums::artist_id.eq(aid));
+                    } else {
+                        query = query.filter(albums::artist_id.is_null());
                     }
 
-                    let existing: Option<(i32, Option<String>)> = query
+                    let album_row: Option<(i32, Option<String>)> = query
                         .select((albums::id, albums::cover_art))
                         .first(&mut conn)
                         .optional()
                         .map_err(MusicRepoError::Database)?;
 
-                    let id = if let Some((id, existing_cover_art)) = existing {
-                        // Store the existing cover art hash (or None if not set)
-                        album_cover_art_cache.insert(id, existing_cover_art);
-                        id
-                    } else {
-                        // Insert new album
-                        diesel::insert_into(albums::table)
-                            .values((
-                                albums::name.eq(album_name),
-                                albums::artist_id.eq(artist_id),
-                                albums::artist_name.eq(&artist_name),
-                                albums::year.eq(track.year.map(|y| y as i32)),
-                                albums::genre.eq(&track.genre),
-                            ))
-                            .execute(&mut conn)
-                            .map_err(MusicRepoError::Database)?;
-
-                        albums_added += 1;
-
-                        let mut q = albums::table
-                            .filter(albums::name.eq(album_name))
-                            .into_boxed();
-                        if let Some(aid) = artist_id {
-                            q = q.filter(albums::artist_id.eq(aid));
+                    if let Some((id, existing_cover)) = album_row {
+                        if !album_cache.contains_key(&cache_key) {
+                            albums_added += 1;
                         }
-                        let new_id: i32 = q
-                            .select(albums::id)
-                            .first(&mut conn)
-                            .map_err(MusicRepoError::Database)?;
-
-                        // New album doesn't have cover art yet
-                        album_cover_art_cache.insert(new_id, None);
-                        new_id
-                    };
-
-                    album_cache.insert(cache_key, id);
-                    Some(id)
+                        album_cache.insert(cache_key, id);
+                        album_cover_art_cache.insert(id, existing_cover);
+                        Some(id)
+                    } else {
+                        None
+                    }
                 }
             } else {
                 None
             };
 
-            // Save cover art for album if we have it and album doesn't have it yet
-            let album_cover_art_id = if let (Some(album_id), Some(art_data), Some(art_mime)) =
-                (album_id, &track.cover_art_data, &track.cover_art_mime)
-            {
-                // Check if this album already has cover art
+            // Handle cover art
+            let album_cover_art_id = if let Some(album_id) = album_id {
                 let existing_cover_art = album_cover_art_cache.get(&album_id).cloned().flatten();
 
                 if existing_cover_art.is_none() {
-                    // Save cover art to cache
-                    match self.save_cover_art(art_data, art_mime) {
-                        Ok(cover_art_hash) => {
-                            // Store the hash as cover_art ID - this is what getCoverArt will use
-                            if let Err(e) =
-                                diesel::update(albums::table.filter(albums::id.eq(album_id)))
-                                    .set(albums::cover_art.eq(&cover_art_hash))
-                                    .execute(&mut conn)
-                            {
-                                eprintln!("  Warning: Failed to update album cover art: {}", e);
-                                None
+                    let art_source: Option<(Vec<u8>, String)> =
+                        if let (Some(art_data), Some(art_mime)) =
+                            (&track.cover_art_data, &track.cover_art_mime)
+                        {
+                            Some((art_data.clone(), art_mime.clone()))
+                        } else if let Some(parent_dir) = track.path.parent() {
+                            let parent_buf = parent_dir.to_path_buf();
+                            if let Some(cached) = dir_cover_art_cache.get(&parent_buf) {
+                                cached.clone()
                             } else {
-                                // Update cache with the new hash
-                                album_cover_art_cache
-                                    .insert(album_id, Some(cover_art_hash.clone()));
-                                cover_art_saved += 1;
-                                Some(cover_art_hash)
+                                let found = self.find_external_cover_art(parent_dir);
+                                dir_cover_art_cache.insert(parent_buf, found.clone());
+                                found
+                            }
+                        } else {
+                            None
+                        };
+
+                    if let Some((art_data, art_mime)) = art_source {
+                        match self.save_cover_art(&art_data, &art_mime) {
+                            Ok(cover_art_hash) => {
+                                if let Err(e) =
+                                    diesel::update(albums::table.filter(albums::id.eq(album_id)))
+                                        .set(albums::cover_art.eq(&cover_art_hash))
+                                        .execute(&mut conn)
+                                {
+                                    eprintln!("  Warning: Failed to update album cover art: {}", e);
+                                    None
+                                } else {
+                                    album_cover_art_cache
+                                        .insert(album_id, Some(cover_art_hash.clone()));
+                                    cover_art_saved += 1;
+                                    Some(cover_art_hash)
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("  Warning: Failed to save cover art: {}", e);
+                                None
                             }
                         }
-                        Err(e) => {
-                            eprintln!("  Warning: Failed to save cover art: {}", e);
-                            None
-                        }
+                    } else {
+                        None
                     }
                 } else {
-                    // Album already has cover art, use existing
                     existing_cover_art
                 }
             } else {
-                // No album or no cover art in track, check if album has existing cover art
-                album_id.and_then(|aid| album_cover_art_cache.get(&aid).cloned().flatten())
+                None
             };
 
-            // For songs, use the album's cover art hash
-            let song_cover_art = album_cover_art_id;
+            let is_update = existing_songs.contains_key(&path_str);
 
-            // Check if song already exists
-            let existing_song: Option<i32> = songs::table
-                .filter(songs::path.eq(&path_str))
-                .select(songs::id)
-                .first(&mut conn)
-                .optional()
-                .map_err(MusicRepoError::Database)?;
+            prepared_tracks.push(PreparedTrack {
+                track,
+                path_str,
+                artist_id,
+                album_id,
+                cover_art: album_cover_art_id,
+                is_update,
+            });
+        }
 
-            let is_update = existing_song.is_some();
-            let result = if is_update {
-                // Update existing song
-                diesel::update(songs::table.filter(songs::path.eq(&path_str)))
-                    .set((
-                        songs::title.eq(&track.title),
-                        songs::album_id.eq(album_id),
-                        songs::artist_id.eq(artist_id),
-                        songs::artist_name.eq(&track.artist),
-                        songs::album_name.eq(&track.album),
-                        songs::file_size.eq(track.file_size as i64),
-                        songs::duration.eq(track.duration_secs as i32),
-                        songs::bit_rate.eq(track.bit_rate.map(|b| b as i32)),
-                        songs::bit_depth.eq(track.bit_depth.map(|b| b as i32)),
-                        songs::sampling_rate.eq(track.sample_rate.map(|s| s as i32)),
-                        songs::channel_count.eq(track.channels.map(|c| c as i32)),
-                        songs::track_number.eq(track.track_number.map(|t| t as i32)),
-                        songs::disc_number.eq(track.disc_number.map(|d| d as i32)),
-                        songs::year.eq(track.year.map(|y| y as i32)),
-                        songs::genre.eq(&track.genre),
-                        songs::cover_art.eq(&song_cover_art),
-                        songs::file_modified_at.eq(track.file_modified_at),
-                        songs::updated_at.eq(diesel::dsl::now),
-                    ))
-                    .execute(&mut conn)
-            } else {
-                // Insert new song
-                diesel::insert_into(songs::table)
-                    .values((
-                        songs::title.eq(&track.title),
-                        songs::album_id.eq(album_id),
-                        songs::artist_id.eq(artist_id),
-                        songs::artist_name.eq(&track.artist),
-                        songs::album_name.eq(&track.album),
-                        songs::music_folder_id.eq(folder.id),
-                        songs::path.eq(&path_str),
-                        songs::parent_path.eq(&track.parent_path),
-                        songs::file_size.eq(track.file_size as i64),
-                        songs::content_type.eq(&track.content_type),
-                        songs::suffix.eq(&track.suffix),
-                        songs::duration.eq(track.duration_secs as i32),
-                        songs::bit_rate.eq(track.bit_rate.map(|b| b as i32)),
-                        songs::bit_depth.eq(track.bit_depth.map(|b| b as i32)),
-                        songs::sampling_rate.eq(track.sample_rate.map(|s| s as i32)),
-                        songs::channel_count.eq(track.channels.map(|c| c as i32)),
-                        songs::track_number.eq(track.track_number.map(|t| t as i32)),
-                        songs::disc_number.eq(track.disc_number.map(|d| d as i32)),
-                        songs::year.eq(track.year.map(|y| y as i32)),
-                        songs::genre.eq(&track.genre),
-                        songs::cover_art.eq(&song_cover_art),
-                        songs::file_modified_at.eq(track.file_modified_at),
-                    ))
-                    .execute(&mut conn)
-            };
-
-            match result {
-                Ok(_) => {
-                    if is_update {
-                        tracks_updated += 1;
+        // Process songs in batches within transactions
+        for batch in prepared_tracks.chunks(BATCH_SIZE) {
+            conn.transaction::<_, diesel::result::Error, _>(|conn| {
+                for prepared in batch {
+                    let result = if prepared.is_update {
+                        diesel::update(songs::table.filter(songs::path.eq(&prepared.path_str)))
+                            .set((
+                                songs::title.eq(&prepared.track.title),
+                                songs::album_id.eq(prepared.album_id),
+                                songs::artist_id.eq(prepared.artist_id),
+                                songs::artist_name.eq(&prepared.track.artist),
+                                songs::album_name.eq(&prepared.track.album),
+                                songs::file_size.eq(prepared.track.file_size as i64),
+                                songs::duration.eq(prepared.track.duration_secs as i32),
+                                songs::bit_rate.eq(prepared.track.bit_rate.map(|b| b as i32)),
+                                songs::bit_depth.eq(prepared.track.bit_depth.map(|b| b as i32)),
+                                songs::sampling_rate.eq(prepared.track.sample_rate.map(|s| s as i32)),
+                                songs::channel_count.eq(prepared.track.channels.map(|c| c as i32)),
+                                songs::track_number.eq(prepared.track.track_number.map(|t| t as i32)),
+                                songs::disc_number.eq(prepared.track.disc_number.map(|d| d as i32)),
+                                songs::year.eq(prepared.track.year.map(|y| y as i32)),
+                                songs::genre.eq(&prepared.track.genre),
+                                songs::cover_art.eq(&prepared.cover_art),
+                                songs::file_modified_at.eq(prepared.track.file_modified_at),
+                                songs::updated_at.eq(diesel::dsl::now),
+                            ))
+                            .execute(conn)
                     } else {
-                        tracks_added += 1;
+                        diesel::insert_into(songs::table)
+                            .values((
+                                songs::title.eq(&prepared.track.title),
+                                songs::album_id.eq(prepared.album_id),
+                                songs::artist_id.eq(prepared.artist_id),
+                                songs::artist_name.eq(&prepared.track.artist),
+                                songs::album_name.eq(&prepared.track.album),
+                                songs::music_folder_id.eq(folder.id),
+                                songs::path.eq(&prepared.path_str),
+                                songs::parent_path.eq(&prepared.track.parent_path),
+                                songs::file_size.eq(prepared.track.file_size as i64),
+                                songs::content_type.eq(&prepared.track.content_type),
+                                songs::suffix.eq(&prepared.track.suffix),
+                                songs::duration.eq(prepared.track.duration_secs as i32),
+                                songs::bit_rate.eq(prepared.track.bit_rate.map(|b| b as i32)),
+                                songs::bit_depth.eq(prepared.track.bit_depth.map(|b| b as i32)),
+                                songs::sampling_rate.eq(prepared.track.sample_rate.map(|s| s as i32)),
+                                songs::channel_count.eq(prepared.track.channels.map(|c| c as i32)),
+                                songs::track_number.eq(prepared.track.track_number.map(|t| t as i32)),
+                                songs::disc_number.eq(prepared.track.disc_number.map(|d| d as i32)),
+                                songs::year.eq(prepared.track.year.map(|y| y as i32)),
+                                songs::genre.eq(&prepared.track.genre),
+                                songs::cover_art.eq(&prepared.cover_art),
+                                songs::file_modified_at.eq(prepared.track.file_modified_at),
+                            ))
+                            .execute(conn)
+                    };
+
+                    match result {
+                        Ok(_) => {}
+                        Err(e) => {
+                            eprintln!("  Failed to insert {}: {}", prepared.path_str, e);
+                        }
                     }
                 }
-                Err(e) => {
-                    eprintln!("  Failed to insert {}: {}", path_str, e);
-                    tracks_failed += 1;
-                }
-            }
+                Ok(())
+            })
+            .map_err(MusicRepoError::Database)?;
 
-            // Update scan progress if state tracking is enabled
-            if let Some(ref state) = state {
-                state.increment_count();
+            // Update counters and progress
+            for prepared in batch {
+                if prepared.is_update {
+                    tracks_updated += 1;
+                } else {
+                    tracks_added += 1;
+                }
+                if let Some(ref state) = state {
+                    state.increment_count();
+                }
             }
         }
 

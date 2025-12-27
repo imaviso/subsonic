@@ -55,6 +55,21 @@ impl DbConfig {
 
 /// Run the SQL migrations to set up the database schema.
 pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result::Error> {
+    // Enable WAL mode for better concurrent read/write performance
+    // WAL mode allows readers to not block writers and vice versa,
+    // which is important when scanning while serving API requests
+    diesel::sql_query("PRAGMA journal_mode = WAL").execute(conn)?;
+
+    // Set synchronous to NORMAL for better write performance while still being safe
+    // NORMAL is safe with WAL mode and provides a good balance
+    diesel::sql_query("PRAGMA synchronous = NORMAL").execute(conn)?;
+
+    // Increase cache size for better read performance (negative = KB, so -64000 = 64MB)
+    diesel::sql_query("PRAGMA cache_size = -64000").execute(conn)?;
+
+    // Enable foreign keys
+    diesel::sql_query("PRAGMA foreign_keys = ON").execute(conn)?;
+
     // Create users table
     diesel::sql_query(
         r#"

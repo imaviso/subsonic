@@ -120,11 +120,15 @@ pub async fn get_playlist(
     let songs = auth.state.get_playlist_songs(playlist_id);
     let user_id = auth.user.id;
 
+    // Batch fetch starred status for all songs
+    let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
+    let starred_map = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+
     let song_responses: Vec<ChildResponse> = songs
         .iter()
         .map(|s| {
-            let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
-            ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+            let starred_at = starred_map.get(&s.id);
+            ChildResponse::from_song_with_starred(s, starred_at)
         })
         .collect();
 
@@ -222,11 +226,16 @@ pub async fn create_playlist(
         // Return the updated playlist
         if let Some(playlist) = auth.state.get_playlist(playlist_id) {
             let songs = auth.state.get_playlist_songs(playlist_id);
+
+            // Batch fetch starred status for all songs
+            let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
+            let starred_map = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+
             let song_responses: Vec<ChildResponse> = songs
                 .iter()
                 .map(|s| {
-                    let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
-                    ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+                    let starred_at = starred_map.get(&s.id);
+                    ChildResponse::from_song_with_starred(s, starred_at)
                 })
                 .collect();
 
@@ -269,11 +278,16 @@ pub async fn create_playlist(
     match auth.state.create_playlist(user_id, name, None, &song_ids) {
         Ok(playlist) => {
             let songs = auth.state.get_playlist_songs(playlist.id);
+
+            // Batch fetch starred status for all songs
+            let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
+            let starred_map = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+
             let song_responses: Vec<ChildResponse> = songs
                 .iter()
                 .map(|s| {
-                    let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
-                    ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+                    let starred_at = starred_map.get(&s.id);
+                    ChildResponse::from_song_with_starred(s, starred_at)
                 })
                 .collect();
 

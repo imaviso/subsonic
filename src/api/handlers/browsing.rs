@@ -104,6 +104,10 @@ pub async fn get_indexes(auth: SubsonicAuth) -> impl IntoResponse {
 pub async fn get_artists(auth: SubsonicAuth) -> impl IntoResponse {
     let artists = auth.state.get_artists();
 
+    // Get album counts for all artists in a single batch query
+    let artist_ids: Vec<i32> = artists.iter().map(|a| a.id).collect();
+    let album_counts = auth.state.get_artist_album_counts_batch(&artist_ids);
+
     // Group artists by first letter
     let mut index_map: BTreeMap<String, Vec<ArtistID3Response>> = BTreeMap::new();
 
@@ -125,8 +129,8 @@ pub async fn get_artists(auth: SubsonicAuth) -> impl IntoResponse {
             "#".to_string()
         };
 
-        // Get album count for this artist
-        let album_count = auth.state.get_artist_album_count(artist.id);
+        // Get album count from batch result
+        let album_count = album_counts.get(&artist.id).copied().unwrap_or(0);
 
         index_map
             .entry(key)
@@ -179,13 +183,20 @@ pub async fn get_album(
     // Get the album's starred status
     let album_starred_at = auth.state.get_starred_at_for_album(auth.user.id, album_id);
 
-    // Get songs for the album with their starred status
+    // Get songs for the album
     let songs = auth.state.get_songs_by_album(album_id);
+
+    // Get starred status for all songs in a single batch query
+    let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
+    let starred_songs = auth
+        .state
+        .get_starred_at_for_songs_batch(auth.user.id, &song_ids);
+
     let song_responses: Vec<ChildResponse> = songs
         .iter()
         .map(|song| {
-            let starred_at = auth.state.get_starred_at_for_song(auth.user.id, song.id);
-            ChildResponse::from_song_with_starred(song, starred_at.as_ref())
+            let starred_at = starred_songs.get(&song.id);
+            ChildResponse::from_song_with_starred(song, starred_at)
         })
         .collect();
 
@@ -446,35 +457,41 @@ pub async fn search3(
     let albums = auth.state.search_albums(query, album_offset, album_count);
     let songs = auth.state.search_songs(query, song_offset, song_count);
 
-    // Convert to response types with starred status
+    // Collect IDs for batch queries
     let user_id = auth.user.id;
+    let artist_ids: Vec<i32> = artists.iter().map(|a| a.id).collect();
+    let album_ids: Vec<i32> = albums.iter().map(|a| a.id).collect();
+    let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
 
+    // Batch fetch album counts and starred status
+    let artist_album_counts = auth.state.get_artist_album_counts_batch(&artist_ids);
+    let starred_artists = auth.state.get_starred_at_for_artists_batch(user_id, &artist_ids);
+    let starred_albums = auth.state.get_starred_at_for_albums_batch(user_id, &album_ids);
+    let starred_songs = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+
+    // Convert to response types with starred status from batch results
     let artist_responses: Vec<ArtistID3Response> = artists
         .iter()
         .map(|a| {
-            let album_count = auth.state.get_artist_album_count(a.id);
-            let starred_at = auth.state.get_starred_at_for_artist(user_id, a.id);
-            ArtistID3Response::from_artist_with_starred(
-                a,
-                Some(album_count as i32),
-                starred_at.as_ref(),
-            )
+            let album_count = artist_album_counts.get(&a.id).copied().unwrap_or(0);
+            let starred_at = starred_artists.get(&a.id);
+            ArtistID3Response::from_artist_with_starred(a, Some(album_count as i32), starred_at)
         })
         .collect();
 
     let album_responses: Vec<AlbumID3Response> = albums
         .iter()
         .map(|a| {
-            let starred_at = auth.state.get_starred_at_for_album(user_id, a.id);
-            AlbumID3Response::from_album_with_starred(a, starred_at.as_ref())
+            let starred_at = starred_albums.get(&a.id);
+            AlbumID3Response::from_album_with_starred(a, starred_at)
         })
         .collect();
 
     let song_responses: Vec<ChildResponse> = songs
         .iter()
         .map(|s| {
-            let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
-            ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+            let starred_at = starred_songs.get(&s.id);
+            ChildResponse::from_song_with_starred(s, starred_at)
         })
         .collect();
 
@@ -528,11 +545,15 @@ pub async fn get_random_songs(
         params.music_folder_id,
     );
 
+    // Batch fetch starred status for all songs
+    let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
+    let starred_songs = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+
     let song_responses: Vec<ChildResponse> = songs
         .iter()
         .map(|s| {
-            let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
-            ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+            let starred_at = starred_songs.get(&s.id);
+            ChildResponse::from_song_with_starred(s, starred_at)
         })
         .collect();
 
@@ -581,11 +602,15 @@ pub async fn get_songs_by_genre(
         .state
         .get_songs_by_genre(genre, count, offset, params.music_folder_id);
 
+    // Batch fetch starred status for all songs
+    let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
+    let starred_songs = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+
     let song_responses: Vec<ChildResponse> = songs
         .iter()
         .map(|s| {
-            let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
-            ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+            let starred_at = starred_songs.get(&s.id);
+            ChildResponse::from_song_with_starred(s, starred_at)
         })
         .collect();
 
@@ -738,11 +763,15 @@ pub async fn get_similar_songs2(
         return error_response(auth.format, &ApiError::NotFound("Item".into())).into_response();
     };
 
+    // Batch fetch starred status for all songs
+    let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
+    let starred_songs = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+
     let song_responses: Vec<ChildResponse> = songs
         .iter()
         .map(|s| {
-            let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
-            ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+            let starred_at = starred_songs.get(&s.id);
+            ChildResponse::from_song_with_starred(s, starred_at)
         })
         .collect();
 
@@ -785,11 +814,15 @@ pub async fn get_top_songs(
     // Get top songs by artist name (ordered by play count)
     let songs = auth.state.get_top_songs_by_artist_name(artist_name, count);
 
+    // Batch fetch starred status for all songs
+    let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
+    let starred_songs = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+
     let song_responses: Vec<ChildResponse> = songs
         .iter()
         .map(|s| {
-            let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
-            ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+            let starred_at = starred_songs.get(&s.id);
+            ChildResponse::from_song_with_starred(s, starred_at)
         })
         .collect();
 
@@ -1022,21 +1055,30 @@ pub async fn search2(
     let albums = auth.state.search_albums(query, album_offset, album_count);
     let songs = auth.state.search_songs(query, song_offset, song_count);
 
-    // Convert to non-ID3 response types
+    // Collect IDs for batch queries
     let user_id = auth.user.id;
+    let artist_ids: Vec<i32> = artists.iter().map(|a| a.id).collect();
+    let album_ids: Vec<i32> = albums.iter().map(|a| a.id).collect();
+    let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
 
+    // Batch fetch starred status
+    let starred_artists = auth.state.get_starred_at_for_artists_batch(user_id, &artist_ids);
+    let starred_albums = auth.state.get_starred_at_for_albums_batch(user_id, &album_ids);
+    let starred_songs = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+
+    // Convert to non-ID3 response types
     let artist_responses: Vec<ArtistResponse> = artists
         .iter()
         .map(|a| {
-            let starred_at = auth.state.get_starred_at_for_artist(user_id, a.id);
-            ArtistResponse::from_artist_with_starred(a, starred_at.as_ref())
+            let starred_at = starred_artists.get(&a.id);
+            ArtistResponse::from_artist_with_starred(a, starred_at)
         })
         .collect();
 
     let album_responses: Vec<ChildResponse> = albums
         .iter()
         .map(|a| {
-            let starred_at = auth.state.get_starred_at_for_album(user_id, a.id);
+            let starred_at = starred_albums.get(&a.id);
             let mut response = ChildResponse::from_album_as_dir(a);
             response.starred = starred_at.map(|dt| dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string());
             response
@@ -1046,8 +1088,8 @@ pub async fn search2(
     let song_responses: Vec<ChildResponse> = songs
         .iter()
         .map(|s| {
-            let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
-            ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+            let starred_at = starred_songs.get(&s.id);
+            ChildResponse::from_song_with_starred(s, starred_at)
         })
         .collect();
 
@@ -1215,11 +1257,15 @@ pub async fn get_similar_songs(
         return error_response(auth.format, &ApiError::NotFound("Item".into())).into_response();
     };
 
+    // Batch fetch starred status for all songs
+    let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
+    let starred_songs = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+
     let song_responses: Vec<ChildResponse> = songs
         .iter()
         .map(|s| {
-            let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
-            ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+            let starred_at = starred_songs.get(&s.id);
+            ChildResponse::from_song_with_starred(s, starred_at)
         })
         .collect();
 

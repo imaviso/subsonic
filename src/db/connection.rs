@@ -70,6 +70,9 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result:
     // Enable foreign keys
     diesel::sql_query("PRAGMA foreign_keys = ON").execute(conn)?;
 
+    // Enable memory-mapped I/O for faster reads (256MB)
+    diesel::sql_query("PRAGMA mmap_size = 268435456").execute(conn)?;
+
     // Create users table
     diesel::sql_query(
         r#"
@@ -247,6 +250,27 @@ pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result:
 
     diesel::sql_query(
         "CREATE INDEX IF NOT EXISTS idx_songs_music_folder_id ON songs(music_folder_id)",
+    )
+    .execute(conn)?;
+
+    // Additional indexes for common query patterns
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_songs_genre ON songs(genre)")
+        .execute(conn)?;
+
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_songs_year ON songs(year)").execute(conn)?;
+
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_songs_artist_name ON songs(artist_name)")
+        .execute(conn)?;
+
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_albums_genre ON albums(genre)")
+        .execute(conn)?;
+
+    diesel::sql_query("CREATE INDEX IF NOT EXISTS idx_albums_year ON albums(year)")
+        .execute(conn)?;
+
+    // Composite index for album queries by artist and year
+    diesel::sql_query(
+        "CREATE INDEX IF NOT EXISTS idx_albums_artist_year ON albums(artist_id, year)",
     )
     .execute(conn)?;
 

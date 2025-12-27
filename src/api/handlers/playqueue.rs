@@ -35,12 +35,16 @@ pub async fn get_play_queue(auth: SubsonicAuth) -> impl IntoResponse {
 
     match auth.state.get_play_queue(user_id, username) {
         Some(play_queue) => {
+            // Batch fetch starred status for all songs
+            let song_ids: Vec<i32> = play_queue.songs.iter().map(|s| s.id).collect();
+            let starred_map = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+
             let song_responses: Vec<ChildResponse> = play_queue
                 .songs
                 .iter()
                 .map(|s| {
-                    let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
-                    ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+                    let starred_at = starred_map.get(&s.id);
+                    ChildResponse::from_song_with_starred(s, starred_at)
                 })
                 .collect();
 
@@ -132,12 +136,16 @@ pub async fn get_play_queue_by_index(auth: SubsonicAuth) -> impl IntoResponse {
 
     match auth.state.get_play_queue(user_id, username) {
         Some(play_queue) => {
+            // Batch fetch starred status for all songs
+            let song_ids: Vec<i32> = play_queue.songs.iter().map(|s| s.id).collect();
+            let starred_map = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+
             let song_responses: Vec<ChildResponse> = play_queue
                 .songs
                 .iter()
                 .map(|s| {
-                    let starred_at = auth.state.get_starred_at_for_song(user_id, s.id);
-                    ChildResponse::from_song_with_starred(s, starred_at.as_ref())
+                    let starred_at = starred_map.get(&s.id);
+                    ChildResponse::from_song_with_starred(s, starred_at)
                 })
                 .collect();
 

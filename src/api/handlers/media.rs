@@ -393,7 +393,10 @@ pub async fn get_cover_art(
         [
             (header::CONTENT_TYPE, content_type.to_string()),
             (header::CONTENT_LENGTH, file_size.to_string()),
-            (header::CACHE_CONTROL, "public, max-age=86400".to_string()), // Cache for 1 day
+            (
+                header::CACHE_CONTROL,
+                "public, max-age=31536000, immutable".to_string(),
+            ), // Cache for 1 year (cover art is content-addressed)
         ],
         body,
     )

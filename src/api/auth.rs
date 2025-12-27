@@ -137,6 +137,28 @@ pub trait AuthState: Send + Sync + 'static {
     /// Get the starred_at timestamp for a song.
     fn get_starred_at_for_song(&self, user_id: i32, song_id: i32) -> Option<NaiveDateTime>;
 
+    // Batch query methods (to fix N+1 queries)
+    /// Get album counts for multiple artists in a single query.
+    fn get_artist_album_counts_batch(&self, artist_ids: &[i32]) -> std::collections::HashMap<i32, i64>;
+    /// Get starred_at timestamps for multiple songs in a single query.
+    fn get_starred_at_for_songs_batch(
+        &self,
+        user_id: i32,
+        song_ids: &[i32],
+    ) -> std::collections::HashMap<i32, NaiveDateTime>;
+    /// Get starred_at timestamps for multiple albums in a single query.
+    fn get_starred_at_for_albums_batch(
+        &self,
+        user_id: i32,
+        album_ids: &[i32],
+    ) -> std::collections::HashMap<i32, NaiveDateTime>;
+    /// Get starred_at timestamps for multiple artists in a single query.
+    fn get_starred_at_for_artists_batch(
+        &self,
+        user_id: i32,
+        artist_ids: &[i32],
+    ) -> std::collections::HashMap<i32, NaiveDateTime>;
+
     // Scrobble/now playing methods
     /// Record a scrobble (song play).
     fn scrobble(
@@ -833,6 +855,45 @@ impl AuthState for DatabaseAuthState {
             .get_starred_at_for_song(user_id, song_id)
             .ok()
             .flatten()
+    }
+
+    fn get_artist_album_counts_batch(
+        &self,
+        artist_ids: &[i32],
+    ) -> std::collections::HashMap<i32, i64> {
+        self.artist_repo
+            .count_albums_batch(artist_ids)
+            .unwrap_or_default()
+    }
+
+    fn get_starred_at_for_songs_batch(
+        &self,
+        user_id: i32,
+        song_ids: &[i32],
+    ) -> std::collections::HashMap<i32, NaiveDateTime> {
+        self.starred_repo
+            .get_starred_at_for_songs_batch(user_id, song_ids)
+            .unwrap_or_default()
+    }
+
+    fn get_starred_at_for_albums_batch(
+        &self,
+        user_id: i32,
+        album_ids: &[i32],
+    ) -> std::collections::HashMap<i32, NaiveDateTime> {
+        self.starred_repo
+            .get_starred_at_for_albums_batch(user_id, album_ids)
+            .unwrap_or_default()
+    }
+
+    fn get_starred_at_for_artists_batch(
+        &self,
+        user_id: i32,
+        artist_ids: &[i32],
+    ) -> std::collections::HashMap<i32, NaiveDateTime> {
+        self.starred_repo
+            .get_starred_at_for_artists_batch(user_id, artist_ids)
+            .unwrap_or_default()
     }
 
     fn scrobble(

@@ -674,6 +674,32 @@ impl ArtistRepository {
         Ok(result)
     }
 
+    /// Count albums for multiple artists in a single query.
+    /// Returns a HashMap mapping artist_id to album_count.
+    pub fn count_albums_batch(
+        &self,
+        artist_ids: &[i32],
+    ) -> Result<std::collections::HashMap<i32, i64>, MusicRepoError> {
+        use std::collections::HashMap;
+
+        if artist_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let mut conn = self.pool.get()?;
+
+        let counts: Vec<(i32, i64)> = albums::table
+            .filter(albums::artist_id.eq_any(artist_ids))
+            .group_by(albums::artist_id)
+            .select((
+                albums::artist_id.assume_not_null(),
+                diesel::dsl::count_star(),
+            ))
+            .load(&mut conn)?;
+
+        Ok(counts.into_iter().collect())
+    }
+
     /// Search artists by name with pagination.
     /// An empty query returns all artists.
     pub fn search(
@@ -1681,6 +1707,82 @@ impl StarredRepository {
             .into_iter()
             .map(|(s, a)| (Album::from(a), s.starred_at))
             .collect())
+    }
+
+    // ========================================================================
+    // Batch query operations (to fix N+1 queries)
+    // ========================================================================
+
+    /// Get starred_at timestamps for multiple songs in a single query.
+    /// Returns a HashMap mapping song_id to starred_at.
+    pub fn get_starred_at_for_songs_batch(
+        &self,
+        user_id: i32,
+        song_ids: &[i32],
+    ) -> Result<std::collections::HashMap<i32, NaiveDateTime>, MusicRepoError> {
+        use std::collections::HashMap;
+
+        if song_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let mut conn = self.pool.get()?;
+
+        let results: Vec<(i32, NaiveDateTime)> = starred::table
+            .filter(starred::user_id.eq(user_id))
+            .filter(starred::song_id.eq_any(song_ids))
+            .select((starred::song_id.assume_not_null(), starred::starred_at))
+            .load(&mut conn)?;
+
+        Ok(results.into_iter().collect())
+    }
+
+    /// Get starred_at timestamps for multiple albums in a single query.
+    /// Returns a HashMap mapping album_id to starred_at.
+    pub fn get_starred_at_for_albums_batch(
+        &self,
+        user_id: i32,
+        album_ids: &[i32],
+    ) -> Result<std::collections::HashMap<i32, NaiveDateTime>, MusicRepoError> {
+        use std::collections::HashMap;
+
+        if album_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let mut conn = self.pool.get()?;
+
+        let results: Vec<(i32, NaiveDateTime)> = starred::table
+            .filter(starred::user_id.eq(user_id))
+            .filter(starred::album_id.eq_any(album_ids))
+            .select((starred::album_id.assume_not_null(), starred::starred_at))
+            .load(&mut conn)?;
+
+        Ok(results.into_iter().collect())
+    }
+
+    /// Get starred_at timestamps for multiple artists in a single query.
+    /// Returns a HashMap mapping artist_id to starred_at.
+    pub fn get_starred_at_for_artists_batch(
+        &self,
+        user_id: i32,
+        artist_ids: &[i32],
+    ) -> Result<std::collections::HashMap<i32, NaiveDateTime>, MusicRepoError> {
+        use std::collections::HashMap;
+
+        if artist_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let mut conn = self.pool.get()?;
+
+        let results: Vec<(i32, NaiveDateTime)> = starred::table
+            .filter(starred::user_id.eq(user_id))
+            .filter(starred::artist_id.eq_any(artist_ids))
+            .select((starred::artist_id.assume_not_null(), starred::starred_at))
+            .load(&mut conn)?;
+
+        Ok(results.into_iter().collect())
     }
 }
 

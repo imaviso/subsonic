@@ -44,7 +44,14 @@ const AUDIO_EXTENSIONS: &[&str] = &[
 /// Common cover art filenames to look for in album directories.
 /// These are tried in order of preference.
 const COVER_ART_FILENAMES: &[&str] = &[
-    "cover", "folder", "front", "album", "albumart", "albumartsmall", "thumb", "art",
+    "cover",
+    "folder",
+    "front",
+    "album",
+    "albumart",
+    "albumartsmall",
+    "thumb",
+    "art",
 ];
 
 /// Supported image file extensions for external cover art.
@@ -256,18 +263,19 @@ impl Scanner {
         for filename in COVER_ART_FILENAMES {
             for ext in IMAGE_EXTENSIONS {
                 let path = dir.join(format!("{}.{}", filename, ext));
-                if path.exists() && path.is_file() {
-                    if let Ok(data) = fs::read(&path) {
-                        let mime = match *ext {
-                            "jpg" | "jpeg" => "image/jpeg",
-                            "png" => "image/png",
-                            "gif" => "image/gif",
-                            "bmp" => "image/bmp",
-                            "webp" => "image/webp",
-                            _ => "image/jpeg",
-                        };
-                        return Some((data, mime.to_string()));
-                    }
+                if path.exists()
+                    && path.is_file()
+                    && let Ok(data) = fs::read(&path)
+                {
+                    let mime = match *ext {
+                        "jpg" | "jpeg" => "image/jpeg",
+                        "png" => "image/png",
+                        "gif" => "image/gif",
+                        "bmp" => "image/bmp",
+                        "webp" => "image/webp",
+                        _ => "image/jpeg",
+                    };
+                    return Some((data, mime.to_string()));
                 }
             }
         }
@@ -290,22 +298,20 @@ impl Scanner {
                     .and_then(|s| s.to_str())
                     .map(|s| s.to_lowercase());
 
-                if let (Some(name), Some(extension)) = (filename, ext) {
-                    if COVER_ART_FILENAMES.contains(&name.as_str())
-                        && IMAGE_EXTENSIONS.contains(&extension.as_str())
-                    {
-                        if let Ok(data) = fs::read(&path) {
-                            let mime = match extension.as_str() {
-                                "jpg" | "jpeg" => "image/jpeg",
-                                "png" => "image/png",
-                                "gif" => "image/gif",
-                                "bmp" => "image/bmp",
-                                "webp" => "image/webp",
-                                _ => "image/jpeg",
-                            };
-                            return Some((data, mime.to_string()));
-                        }
-                    }
+                if let (Some(name), Some(extension)) = (filename, ext)
+                    && COVER_ART_FILENAMES.contains(&name.as_str())
+                    && IMAGE_EXTENSIONS.contains(&extension.as_str())
+                    && let Ok(data) = fs::read(&path)
+                {
+                    let mime = match extension.as_str() {
+                        "jpg" | "jpeg" => "image/jpeg",
+                        "png" => "image/png",
+                        "gif" => "image/gif",
+                        "bmp" => "image/bmp",
+                        "webp" => "image/webp",
+                        _ => "image/jpeg",
+                    };
+                    return Some((data, mime.to_string()));
                 }
             }
         }
@@ -791,10 +797,10 @@ impl Scanner {
                 .or(track.artist.as_ref())
                 .cloned();
 
-            if let Some(ref name) = artist_name {
-                if !artist_cache.contains_key(name) {
-                    new_artists.insert(name.clone());
-                }
+            if let Some(ref name) = artist_name
+                && !artist_cache.contains_key(name)
+            {
+                new_artists.insert(name.clone());
             }
         }
 
@@ -866,7 +872,9 @@ impl Scanner {
                 .or(track.artist.as_ref())
                 .cloned();
 
-            let artist_id = artist_name.as_ref().and_then(|name| artist_cache.get(name).copied());
+            let artist_id = artist_name
+                .as_ref()
+                .and_then(|name| artist_cache.get(name).copied());
 
             // Get or create album
             let album_id = if let Some(ref album_name) = track.album {
@@ -1002,9 +1010,11 @@ impl Scanner {
                                 songs::duration.eq(prepared.track.duration_secs as i32),
                                 songs::bit_rate.eq(prepared.track.bit_rate.map(|b| b as i32)),
                                 songs::bit_depth.eq(prepared.track.bit_depth.map(|b| b as i32)),
-                                songs::sampling_rate.eq(prepared.track.sample_rate.map(|s| s as i32)),
+                                songs::sampling_rate
+                                    .eq(prepared.track.sample_rate.map(|s| s as i32)),
                                 songs::channel_count.eq(prepared.track.channels.map(|c| c as i32)),
-                                songs::track_number.eq(prepared.track.track_number.map(|t| t as i32)),
+                                songs::track_number
+                                    .eq(prepared.track.track_number.map(|t| t as i32)),
                                 songs::disc_number.eq(prepared.track.disc_number.map(|d| d as i32)),
                                 songs::year.eq(prepared.track.year.map(|y| y as i32)),
                                 songs::genre.eq(&prepared.track.genre),
@@ -1030,9 +1040,11 @@ impl Scanner {
                                 songs::duration.eq(prepared.track.duration_secs as i32),
                                 songs::bit_rate.eq(prepared.track.bit_rate.map(|b| b as i32)),
                                 songs::bit_depth.eq(prepared.track.bit_depth.map(|b| b as i32)),
-                                songs::sampling_rate.eq(prepared.track.sample_rate.map(|s| s as i32)),
+                                songs::sampling_rate
+                                    .eq(prepared.track.sample_rate.map(|s| s as i32)),
                                 songs::channel_count.eq(prepared.track.channels.map(|c| c as i32)),
-                                songs::track_number.eq(prepared.track.track_number.map(|t| t as i32)),
+                                songs::track_number
+                                    .eq(prepared.track.track_number.map(|t| t as i32)),
                                 songs::disc_number.eq(prepared.track.disc_number.map(|d| d as i32)),
                                 songs::year.eq(prepared.track.year.map(|y| y as i32)),
                                 songs::genre.eq(&prepared.track.genre),

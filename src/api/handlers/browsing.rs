@@ -465,9 +465,15 @@ pub async fn search3(
 
     // Batch fetch album counts and starred status
     let artist_album_counts = auth.state.get_artist_album_counts_batch(&artist_ids);
-    let starred_artists = auth.state.get_starred_at_for_artists_batch(user_id, &artist_ids);
-    let starred_albums = auth.state.get_starred_at_for_albums_batch(user_id, &album_ids);
-    let starred_songs = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+    let starred_artists = auth
+        .state
+        .get_starred_at_for_artists_batch(user_id, &artist_ids);
+    let starred_albums = auth
+        .state
+        .get_starred_at_for_albums_batch(user_id, &album_ids);
+    let starred_songs = auth
+        .state
+        .get_starred_at_for_songs_batch(user_id, &song_ids);
 
     // Convert to response types with starred status from batch results
     let artist_responses: Vec<ArtistID3Response> = artists
@@ -547,7 +553,9 @@ pub async fn get_random_songs(
 
     // Batch fetch starred status for all songs
     let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
-    let starred_songs = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+    let starred_songs = auth
+        .state
+        .get_starred_at_for_songs_batch(user_id, &song_ids);
 
     let song_responses: Vec<ChildResponse> = songs
         .iter()
@@ -604,7 +612,9 @@ pub async fn get_songs_by_genre(
 
     // Batch fetch starred status for all songs
     let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
-    let starred_songs = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+    let starred_songs = auth
+        .state
+        .get_starred_at_for_songs_batch(user_id, &song_ids);
 
     let song_responses: Vec<ChildResponse> = songs
         .iter()
@@ -765,7 +775,9 @@ pub async fn get_similar_songs2(
 
     // Batch fetch starred status for all songs
     let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
-    let starred_songs = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+    let starred_songs = auth
+        .state
+        .get_starred_at_for_songs_batch(user_id, &song_ids);
 
     let song_responses: Vec<ChildResponse> = songs
         .iter()
@@ -816,7 +828,9 @@ pub async fn get_top_songs(
 
     // Batch fetch starred status for all songs
     let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
-    let starred_songs = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+    let starred_songs = auth
+        .state
+        .get_starred_at_for_songs_batch(user_id, &song_ids);
 
     let song_responses: Vec<ChildResponse> = songs
         .iter()
@@ -1062,9 +1076,15 @@ pub async fn search2(
     let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
 
     // Batch fetch starred status
-    let starred_artists = auth.state.get_starred_at_for_artists_batch(user_id, &artist_ids);
-    let starred_albums = auth.state.get_starred_at_for_albums_batch(user_id, &album_ids);
-    let starred_songs = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+    let starred_artists = auth
+        .state
+        .get_starred_at_for_artists_batch(user_id, &artist_ids);
+    let starred_albums = auth
+        .state
+        .get_starred_at_for_albums_batch(user_id, &album_ids);
+    let starred_songs = auth
+        .state
+        .get_starred_at_for_songs_batch(user_id, &song_ids);
 
     // Convert to non-ID3 response types
     let artist_responses: Vec<ArtistResponse> = artists
@@ -1259,7 +1279,9 @@ pub async fn get_similar_songs(
 
     // Batch fetch starred status for all songs
     let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
-    let starred_songs = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+    let starred_songs = auth
+        .state
+        .get_starred_at_for_songs_batch(user_id, &song_ids);
 
     let song_responses: Vec<ChildResponse> = songs
         .iter()

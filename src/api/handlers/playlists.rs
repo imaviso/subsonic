@@ -122,7 +122,9 @@ pub async fn get_playlist(
 
     // Batch fetch starred status for all songs
     let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
-    let starred_map = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+    let starred_map = auth
+        .state
+        .get_starred_at_for_songs_batch(user_id, &song_ids);
 
     let song_responses: Vec<ChildResponse> = songs
         .iter()
@@ -229,7 +231,9 @@ pub async fn create_playlist(
 
             // Batch fetch starred status for all songs
             let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
-            let starred_map = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+            let starred_map = auth
+                .state
+                .get_starred_at_for_songs_batch(user_id, &song_ids);
 
             let song_responses: Vec<ChildResponse> = songs
                 .iter()
@@ -281,7 +285,9 @@ pub async fn create_playlist(
 
             // Batch fetch starred status for all songs
             let song_ids: Vec<i32> = songs.iter().map(|s| s.id).collect();
-            let starred_map = auth.state.get_starred_at_for_songs_batch(user_id, &song_ids);
+            let starred_map = auth
+                .state
+                .get_starred_at_for_songs_batch(user_id, &song_ids);
 
             let song_responses: Vec<ChildResponse> = songs
                 .iter()

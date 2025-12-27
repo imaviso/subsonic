@@ -139,7 +139,10 @@ pub trait AuthState: Send + Sync + 'static {
 
     // Batch query methods (to fix N+1 queries)
     /// Get album counts for multiple artists in a single query.
-    fn get_artist_album_counts_batch(&self, artist_ids: &[i32]) -> std::collections::HashMap<i32, i64>;
+    fn get_artist_album_counts_batch(
+        &self,
+        artist_ids: &[i32],
+    ) -> std::collections::HashMap<i32, i64>;
     /// Get starred_at timestamps for multiple songs in a single query.
     fn get_starred_at_for_songs_batch(
         &self,

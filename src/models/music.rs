@@ -1205,7 +1205,7 @@ pub struct TopSongsResponse {
     pub songs: Vec<ChildResponse>,
 }
 
-/// Lyrics response for getLyricsBySongId and getLyrics.
+/// Lyrics response for getLyrics (original Subsonic API).
 #[derive(Debug, Serialize, Clone)]
 pub struct LyricsResponse {
     #[serde(rename = "@artist", skip_serializing_if = "Option::is_none")]
@@ -1233,6 +1233,131 @@ impl LyricsResponse {
             title,
             value: lyrics,
         }
+    }
+}
+
+// ============================================================================
+// OpenSubsonic Structured Lyrics Types (for getLyricsBySongId)
+// ============================================================================
+
+/// A single line of lyrics, optionally with a start time for synchronized lyrics.
+#[derive(Debug, Serialize, Clone)]
+pub struct LyricLine {
+    /// Start time in milliseconds from track start. Omit if unsynced.
+    #[serde(rename = "@start", skip_serializing_if = "Option::is_none")]
+    pub start: Option<i64>,
+    /// The actual text of the lyric line.
+    #[serde(rename = "$text")]
+    pub value: String,
+}
+
+impl LyricLine {
+    /// Create a new synced lyric line with a start time.
+    pub fn synced(start: i64, value: impl Into<String>) -> Self {
+        Self {
+            start: Some(start),
+            value: value.into(),
+        }
+    }
+
+    /// Create a new unsynced lyric line without a start time.
+    pub fn unsynced(value: impl Into<String>) -> Self {
+        Self {
+            start: None,
+            value: value.into(),
+        }
+    }
+}
+
+/// Structured lyrics for a song, supporting synchronized lyrics and multiple languages.
+#[derive(Debug, Serialize, Clone)]
+pub struct StructuredLyrics {
+    /// The artist name to display. May differ from the song's artist (e.g., localized).
+    #[serde(rename = "@displayArtist", skip_serializing_if = "Option::is_none")]
+    pub display_artist: Option<String>,
+    /// The song title to display. May differ from the song's title (e.g., localized).
+    #[serde(rename = "@displayTitle", skip_serializing_if = "Option::is_none")]
+    pub display_title: Option<String>,
+    /// ISO 639 language code (e.g., "eng", "jpn"). Use "und" or "xxx" for unknown.
+    #[serde(rename = "@lang")]
+    pub lang: String,
+    /// Offset in milliseconds. Positive = lyrics appear sooner, negative = later.
+    #[serde(rename = "@offset", skip_serializing_if = "Option::is_none")]
+    pub offset: Option<i64>,
+    /// Whether the lyrics are synchronized (have timestamps).
+    #[serde(rename = "@synced")]
+    pub synced: bool,
+    /// The lyric lines, ordered by start time (synced) or appearance (unsynced).
+    #[serde(rename = "line")]
+    pub lines: Vec<LyricLine>,
+}
+
+impl StructuredLyrics {
+    /// Create new unsynced lyrics.
+    pub fn unsynced(lang: impl Into<String>, lines: Vec<String>) -> Self {
+        Self {
+            display_artist: None,
+            display_title: None,
+            lang: lang.into(),
+            offset: None,
+            synced: false,
+            lines: lines.into_iter().map(LyricLine::unsynced).collect(),
+        }
+    }
+
+    /// Create new synced lyrics.
+    pub fn synced(lang: impl Into<String>, lines: Vec<(i64, String)>) -> Self {
+        Self {
+            display_artist: None,
+            display_title: None,
+            lang: lang.into(),
+            offset: None,
+            synced: true,
+            lines: lines
+                .into_iter()
+                .map(|(start, value)| LyricLine::synced(start, value))
+                .collect(),
+        }
+    }
+
+    /// Set the display artist.
+    pub fn with_display_artist(mut self, artist: impl Into<String>) -> Self {
+        self.display_artist = Some(artist.into());
+        self
+    }
+
+    /// Set the display title.
+    pub fn with_display_title(mut self, title: impl Into<String>) -> Self {
+        self.display_title = Some(title.into());
+        self
+    }
+
+    /// Set the offset.
+    pub fn with_offset(mut self, offset: i64) -> Self {
+        self.offset = Some(offset);
+        self
+    }
+}
+
+/// Lyrics list response for getLyricsBySongId (OpenSubsonic extension).
+#[derive(Debug, Serialize, Clone)]
+pub struct LyricsListResponse {
+    /// Array of structured lyrics. May have multiple entries for different languages.
+    #[serde(rename = "structuredLyrics", skip_serializing_if = "Vec::is_empty")]
+    pub structured_lyrics: Vec<StructuredLyrics>,
+}
+
+impl LyricsListResponse {
+    /// Create an empty lyrics list response.
+    pub fn empty() -> Self {
+        Self {
+            structured_lyrics: Vec::new(),
+        }
+    }
+
+    /// Create a lyrics list response with structured lyrics.
+    pub fn new(structured_lyrics: Vec<StructuredLyrics>) -> Self {
+        Self { structured_lyrics }
     }
 }
 

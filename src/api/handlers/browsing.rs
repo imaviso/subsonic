@@ -10,17 +10,19 @@ use crate::api::error::ApiError;
 use crate::api::response::{
     error_response, ok_album, ok_album_info, ok_album_list, ok_album_list2, ok_artist,
     ok_artist_info, ok_artist_info2, ok_artists, ok_directory, ok_genres, ok_indexes, ok_lyrics,
-    ok_music_folders, ok_random_songs, ok_search_result, ok_search_result2, ok_search_result3,
-    ok_similar_songs, ok_similar_songs2, ok_song, ok_songs_by_genre, ok_starred, ok_top_songs,
+    ok_lyrics_list, ok_music_folders, ok_random_songs, ok_search_result, ok_search_result2,
+    ok_search_result3, ok_similar_songs, ok_similar_songs2, ok_song, ok_songs_by_genre, ok_starred,
+    ok_top_songs,
 };
 use crate::models::music::{
     AlbumID3Response, AlbumInfoResponse, AlbumList2Response, AlbumListResponse,
     AlbumWithSongsID3Response, ArtistID3Response, ArtistInfo2Response, ArtistInfoResponse,
     ArtistResponse, ArtistWithAlbumsID3Response, ArtistsID3Response, ChildResponse,
     DirectoryResponse, GenreResponse, GenresResponse, IndexID3Response, IndexResponse,
-    IndexesResponse, LyricsResponse, MusicFolderResponse, RandomSongsResponse, SearchMatch,
-    SearchResult2Response, SearchResult3Response, SearchResultResponse, SimilarSongs2Response,
-    SimilarSongsResponse, SongsByGenreResponse, StarredResponse, TopSongsResponse,
+    IndexesResponse, LyricsListResponse, LyricsResponse, MusicFolderResponse, RandomSongsResponse,
+    SearchMatch, SearchResult2Response, SearchResult3Response, SearchResultResponse,
+    SimilarSongs2Response, SimilarSongsResponse, SongsByGenreResponse, StarredResponse,
+    TopSongsResponse,
 };
 
 /// Query parameters for endpoints that require an ID.
@@ -1333,8 +1335,8 @@ pub async fn get_lyrics(
 
 /// GET/POST /rest/getLyricsBySongId[.view]
 ///
-/// Returns lyrics for a given song (OpenSubsonic extension).
-/// Note: This is a stub implementation that returns empty lyrics.
+/// Returns structured lyrics for a given song (OpenSubsonic extension).
+/// Returns an empty lyricsList if no lyrics are available.
 pub async fn get_lyrics_by_song_id(
     axum::extract::Query(params): axum::extract::Query<IdParams>,
     auth: SubsonicAuth,
@@ -1348,15 +1350,16 @@ pub async fn get_lyrics_by_song_id(
         }
     };
 
-    // Get the song to get artist and title info
-    let (artist, title) = if let Some(song) = auth.state.get_song(song_id) {
-        (song.artist_name, Some(song.title))
-    } else {
-        (None, None)
-    };
+    // Verify the song exists
+    if auth.state.get_song(song_id).is_none() {
+        return error_response(auth.format, &ApiError::NotFound("Song not found".into()))
+            .into_response();
+    }
 
-    // Return empty lyrics with the song's artist/title
-    let response = LyricsResponse::new(artist, title, None);
+    // Return empty lyrics list (no lyrics database/service integration yet)
+    // In the future, this could read embedded lyrics from the audio file
+    // or fetch from an external lyrics service
+    let response = LyricsListResponse::empty();
 
-    ok_lyrics(auth.format, response).into_response()
+    ok_lyrics_list(auth.format, response).into_response()
 }

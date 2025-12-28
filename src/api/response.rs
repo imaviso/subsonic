@@ -13,11 +13,12 @@ use super::error::ApiError;
 use crate::models::music::{
     AlbumInfoResponse, AlbumList2Response, AlbumListResponse, AlbumWithSongsID3Response,
     ArtistInfo2Response, ArtistInfoResponse, ArtistWithAlbumsID3Response, ArtistsID3Response,
-    ChildResponse, DirectoryResponse, GenresResponse, IndexesResponse, LyricsResponse,
-    MusicFolderResponse, NowPlayingResponse, PlayQueueByIndexResponse, PlayQueueResponse,
-    PlaylistWithSongsResponse, PlaylistsResponse, RandomSongsResponse, SearchResult2Response,
-    SearchResult3Response, SearchResultResponse, SimilarSongs2Response, SimilarSongsResponse,
-    SongsByGenreResponse, Starred2Response, StarredResponse, TokenInfoResponse, TopSongsResponse,
+    ChildResponse, DirectoryResponse, GenresResponse, IndexesResponse, LyricsListResponse,
+    LyricsResponse, MusicFolderResponse, NowPlayingResponse, PlayQueueByIndexResponse,
+    PlayQueueResponse, PlaylistWithSongsResponse, PlaylistsResponse, RandomSongsResponse,
+    SearchResult2Response, SearchResult3Response, SearchResultResponse, SimilarSongs2Response,
+    SimilarSongsResponse, SongsByGenreResponse, Starred2Response, StarredResponse,
+    TokenInfoResponse, TopSongsResponse,
 };
 use crate::models::user::{UserResponse, UsersResponse};
 
@@ -82,6 +83,7 @@ pub fn supported_extensions() -> Vec<OpenSubsonicExtension> {
     vec![
         OpenSubsonicExtension::new("formPost", vec![1]),
         OpenSubsonicExtension::new("apiKeyAuthentication", vec![1]),
+        OpenSubsonicExtension::new("songLyrics", vec![1]),
     ]
 }
 
@@ -1157,6 +1159,39 @@ mod xml {
 
     #[derive(Debug, Serialize)]
     #[serde(rename = "subsonic-response")]
+    pub struct LyricsListResponse {
+        #[serde(rename = "@xmlns")]
+        pub xmlns: &'static str,
+        #[serde(rename = "@status")]
+        pub status: ResponseStatus,
+        #[serde(rename = "@version")]
+        pub version: &'static str,
+        #[serde(rename = "@type")]
+        pub server_type: &'static str,
+        #[serde(rename = "@serverVersion")]
+        pub server_version: &'static str,
+        #[serde(rename = "@openSubsonic")]
+        pub open_subsonic: bool,
+        #[serde(rename = "lyricsList")]
+        pub lyrics_list: super::LyricsListResponse,
+    }
+
+    impl LyricsListResponse {
+        pub fn new(lyrics_list: super::LyricsListResponse) -> Self {
+            Self {
+                xmlns: "http://subsonic.org/restapi",
+                status: ResponseStatus::Ok,
+                version: API_VERSION,
+                server_type: SERVER_NAME,
+                server_version: SERVER_VERSION,
+                open_subsonic: true,
+                lyrics_list,
+            }
+        }
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename = "subsonic-response")]
     pub struct DirectoryResponse {
         #[serde(rename = "@xmlns")]
         pub xmlns: &'static str,
@@ -1466,6 +1501,8 @@ mod json {
         pub top_songs: Option<super::TopSongsResponse>,
         #[serde(skip_serializing_if = "Option::is_none")]
         pub lyrics: Option<super::LyricsResponse>,
+        #[serde(skip_serializing_if = "Option::is_none", rename = "lyricsList")]
+        pub lyrics_list: Option<super::LyricsListResponse>,
         #[serde(skip_serializing_if = "Option::is_none")]
         pub directory: Option<super::DirectoryResponse>,
         #[serde(skip_serializing_if = "Option::is_none", rename = "albumList")]
@@ -1555,6 +1592,7 @@ mod json {
                 similar_songs2: None,
                 top_songs: None,
                 lyrics: None,
+                lyrics_list: None,
                 directory: None,
                 album_list: None,
                 starred: None,
@@ -1602,6 +1640,7 @@ mod json {
                 similar_songs2: None,
                 top_songs: None,
                 lyrics: None,
+                lyrics_list: None,
                 directory: None,
                 album_list: None,
                 starred: None,
@@ -1760,6 +1799,11 @@ mod json {
             self
         }
 
+        pub fn with_lyrics_list(mut self, lyrics_list: super::LyricsListResponse) -> Self {
+            self.lyrics_list = Some(lyrics_list);
+            self
+        }
+
         pub fn with_directory(mut self, directory: super::DirectoryResponse) -> Self {
             self.directory = Some(directory);
             self
@@ -1846,6 +1890,7 @@ enum ResponseKind {
     SimilarSongs2(SimilarSongs2Response),
     TopSongs(TopSongsResponse),
     Lyrics(LyricsResponse),
+    LyricsList(LyricsListResponse),
     // Non-ID3 endpoints
     Directory(DirectoryResponse),
     AlbumList(AlbumListResponse),
@@ -2083,6 +2128,13 @@ impl SubsonicResponse {
         }
     }
 
+    pub fn lyrics_list(format: Format, lyrics_list: LyricsListResponse) -> Self {
+        Self {
+            format,
+            kind: ResponseKind::LyricsList(lyrics_list),
+        }
+    }
+
     pub fn directory(format: Format, directory: DirectoryResponse) -> Self {
         Self {
             format,
@@ -2232,6 +2284,9 @@ impl SubsonicResponse {
             ResponseKind::Lyrics(lyrics) => {
                 quick_xml::se::to_string(&xml::LyricsResponse::new(lyrics))
             }
+            ResponseKind::LyricsList(lyrics_list) => {
+                quick_xml::se::to_string(&xml::LyricsListResponse::new(lyrics_list))
+            }
             ResponseKind::Directory(directory) => {
                 quick_xml::se::to_string(&xml::DirectoryResponse::new(directory))
             }
@@ -2349,6 +2404,9 @@ impl SubsonicResponse {
                 .with_top_songs(top_songs)
                 .wrap(),
             ResponseKind::Lyrics(lyrics) => json::SubsonicResponse::ok().with_lyrics(lyrics).wrap(),
+            ResponseKind::LyricsList(lyrics_list) => json::SubsonicResponse::ok()
+                .with_lyrics_list(lyrics_list)
+                .wrap(),
             ResponseKind::Directory(directory) => json::SubsonicResponse::ok()
                 .with_directory(directory)
                 .wrap(),
@@ -2594,6 +2652,11 @@ pub fn ok_top_songs(format: Format, top_songs: TopSongsResponse) -> SubsonicResp
 /// Helper function to create a lyrics response.
 pub fn ok_lyrics(format: Format, lyrics: LyricsResponse) -> SubsonicResponse {
     SubsonicResponse::lyrics(format, lyrics)
+}
+
+/// Helper function to create a lyrics list response (getLyricsBySongId - OpenSubsonic).
+pub fn ok_lyrics_list(format: Format, lyrics_list: LyricsListResponse) -> SubsonicResponse {
+    SubsonicResponse::lyrics_list(format, lyrics_list)
 }
 
 /// Helper function to create a directory response (getMusicDirectory).

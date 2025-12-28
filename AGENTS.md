@@ -4,7 +4,7 @@ This document provides guidance for AI agents working on this codebase.
 
 ## Project Overview
 
-**subsonic** is a Subsonic/OpenSubsonic API-compatible music streaming server written in Rust. It implements the [Subsonic API](http://www.subsonic.org/pages/api.jsp) and [OpenSubsonic extensions](https://opensubsonic.netlify.app/), allowing users to stream their music library using any Subsonic-compatible client.
+**subsonic** is a Subsonic/OpenSubsonic API-compatible music streaming server written in Rust. It implements the [Subsonic API](http://www.subsonic.org/pages/api.jsp) and [OpenSubsonic extensions](https://opensubsonic.netlify.app/).
 
 ## Tech Stack
 
@@ -17,177 +17,204 @@ This document provides guidance for AI agents working on this codebase.
 - **Media Scanning**: lofty (audio metadata), walkdir (filesystem traversal)
 - **CLI**: clap
 
-## Project Structure
-
-```
-src/
-├── main.rs          # CLI entry point, router setup, commands
-├── lib.rs           # Library exports
-├── api/             # Subsonic API implementation
-│   ├── auth.rs      # Authentication middleware & AuthState trait
-│   ├── error.rs     # API error types
-│   ├── response.rs  # Response formatting (XML/JSON)
-│   ├── router.rs    # SubsonicRouterExt trait for .view suffix handling
-│   └── handlers/    # API endpoint handlers
-│       ├── browsing.rs    # getMusicFolders, getArtists, getAlbum, etc.
-│       ├── media.rs       # stream, download, getCoverArt
-│       ├── annotation.rs  # star, unstar, scrobble, setRating
-│       ├── playlists.rs   # playlist management
-│       ├── playqueue.rs   # play queue sync
-│       ├── scanning.rs    # startScan, getScanStatus
-│       ├── system.rs      # ping, getLicense
-│       └── users.rs       # user management
-├── crypto/          # Password hashing utilities
-├── db/              # Database layer
-│   ├── connection.rs   # Pool setup
-│   ├── schema.rs       # Diesel schema (auto-generated)
-│   └── repository.rs   # Repository pattern implementations
-├── models/          # Domain models
-│   ├── user.rs      # User model with auth methods
-│   └── music.rs     # Artist, Album, Song, etc. + API response types
-└── scanner/         # Music library scanner
-```
-
-## Architecture Patterns
-
-### Authentication
-
-All API handlers use the `SubsonicAuth` extractor which:
-1. Extracts auth params from query string AND/OR form body (POST)
-2. Supports three auth methods: password, token (MD5), API key
-3. Provides access to the authenticated `User` and `AuthState`
-
-```rust
-pub async fn handler(auth: SubsonicAuth) -> impl IntoResponse {
-    // auth.user - authenticated user
-    // auth.format - requested response format (XML/JSON)
-    // auth.state - access to all repositories
-    ok_empty(auth.format)
-}
-```
-
-### Response Format
-
-The Subsonic API supports both XML and JSON responses. Use the `ok_*` helper functions from `response.rs`:
-
-```rust
-ok_empty(format)                    // Empty success response
-ok_music_folders(format, data)      // getMusicFolders response
-error_response(format, &ApiError)   // Error response
-```
-
-### Repository Pattern
-
-All database access goes through repository structs in `db/repository.rs`. Each repository wraps a `DbPool` and provides typed methods:
-
-```rust
-let repo = UserRepository::new(pool);
-let user = repo.find_by_username("admin")?;
-```
-
-### AuthState Trait
-
-The `AuthState` trait in `auth.rs` abstracts all data access needed by handlers. `DatabaseAuthState` implements this trait using the repositories. This design allows handlers to be tested with mock implementations.
-
-## Code Conventions
-
-### Rust Style
-
-- Use `//!` doc comments for module-level documentation
-- Use `///` doc comments for public functions and types
-- Prefer `impl IntoResponse` as handler return type
-- Use `thiserror` for error types
-- Follow standard Rust naming: `snake_case` for functions/variables, `PascalCase` for types
-
-### API Handlers
-
-- Handler functions are `async fn` that take `SubsonicAuth` as the first parameter
-- Additional query params use separate `#[derive(Deserialize)]` structs
-- All handlers support both GET and POST (via `SubsonicRouterExt`)
-- The `.view` suffix is automatically handled
-
-### Database
-
-- Schema is managed with Diesel migrations in `migrations/`
-- Run migrations with: `diesel migration run`
-- Schema is auto-generated in `src/db/schema.rs`
-- Use `chrono::NaiveDateTime` for timestamps
-
-## Development Commands
+## Build/Lint/Test Commands
 
 ```bash
 # Build
 cargo build
 
-# Run server (default port 4040)
+# Build release
+cargo build --release
+
+# Run all tests
+cargo test
+
+# Run a single test by name
+cargo test test_name
+cargo test api::auth::tests::test_format_from_param
+
+# Run tests in a specific module
+cargo test api::auth::tests
+
+# Run tests with output
+cargo test -- --nocapture
+
+# Format code (always run before committing)
+cargo fmt
+
+# Lint with Clippy (must pass with no warnings)
+cargo clippy
+
+# Check without building
+cargo check
+
+# Run the server
 cargo run -- serve
 
-# Create admin user
-cargo run -- create-user --username admin --password secret --admin
-
-# Add music folder
-cargo run -- add-folder --name "Music" --path /path/to/music
-
-# Scan library
-cargo run -- scan
-
-# Generate API key for a user
-cargo run -- generate-api-key --username admin
+# Run with debug logging
+RUST_LOG=subsonic=debug cargo run -- serve
 ```
 
-## Testing
+## Project Structure
 
-Run tests with:
-
-```bash
-cargo test
+```
+src/
+├── main.rs          # CLI entry point, router setup
+├── lib.rs           # Library exports
+├── api/
+│   ├── auth.rs      # Authentication middleware & AuthState trait
+│   ├── error.rs     # API error types (thiserror)
+│   ├── response.rs  # Response formatting (XML/JSON)
+│   ├── router.rs    # SubsonicRouterExt trait
+│   └── handlers/    # API endpoint handlers
+├── crypto/          # Password hashing (Argon2)
+├── db/
+│   ├── connection.rs   # Pool setup
+│   ├── schema.rs       # Diesel schema (auto-generated)
+│   └── repository.rs   # Repository pattern
+├── models/          # Domain models & API response types
+└── scanner/         # Music library scanner
 ```
 
-The auth module includes unit tests for password encoding, format parsing, and param merging.
+## Code Style Guidelines
 
-## API Implementation Status
+### Formatting & Linting
 
-The server implements the core Subsonic API endpoints:
-- **System**: ping, getLicense, getOpenSubsonicExtensions
-- **Browsing (ID3)**: getMusicFolders, getIndexes, getArtists, getArtist, getAlbum, getSong, getAlbumList2, search3, getGenres, getArtistInfo2, getAlbumInfo2, getSimilarSongs2, getTopSongs
-- **Browsing (Non-ID3)**: getMusicDirectory, getAlbumList, getStarred, getArtistInfo, getAlbumInfo, getSimilarSongs
-- **Searching**: search3, search2, search
-- **Media Retrieval**: stream, download, getCoverArt, getLyrics, getLyricsBySongId
-- **Annotation**: star, unstar, scrobble, setRating, getStarred2, getNowPlaying
-- **Playlists**: getPlaylists, getPlaylist, createPlaylist, updatePlaylist, deletePlaylist
-- **Play Queue**: getPlayQueue, savePlayQueue
-- **User Management**: getUser, getUsers, createUser, updateUser, deleteUser, changePassword
-- **Scanning**: startScan, getScanStatus
+- Always run `cargo fmt` before committing
+- Code must pass `cargo clippy` with no warnings
+- Use `#[allow(clippy::...)]` sparingly and with justification
 
-## Key Files to Understand
+### Imports
 
-1. `src/main.rs` - Entry point, CLI commands, router configuration
-2. `src/api/auth.rs` - Authentication logic and `AuthState` trait (the main abstraction)
-3. `src/api/response.rs` - Response serialization (XML/JSON)
-4. `src/db/repository.rs` - All database queries
-5. `src/models/music.rs` - Music domain models and API response types
+- Group imports in this order: std, external crates, crate modules
+- Use `use crate::` for internal imports, not `super::` except within the same module
+- Prefer explicit imports over glob imports (`*`)
 
-## Common Tasks
+```rust
+use std::sync::Arc;
+
+use axum::response::IntoResponse;
+use serde::Deserialize;
+
+use crate::api::auth::SubsonicAuth;
+use crate::api::error::ApiError;
+```
+
+### Naming Conventions
+
+- `snake_case` for functions, variables, modules
+- `PascalCase` for types, traits, enums
+- `SCREAMING_SNAKE_CASE` for constants
+- Suffix response types with `Response` (e.g., `LyricsResponse`, `AlbumID3Response`)
+- Prefix new database records with `New` (e.g., `NewUser`, `NewMusicFolder`)
+
+### Documentation
+
+- Use `//!` for module-level documentation
+- Use `///` for public functions, types, and fields
+- Document all public API endpoints with their HTTP method and path
+
+```rust
+/// GET/POST /rest/getLyrics[.view]
+///
+/// Searches for and returns lyrics for a given song.
+pub async fn get_lyrics(...) -> impl IntoResponse { ... }
+```
+
+### Error Handling
+
+- Use `thiserror` for error types (see `src/api/error.rs`)
+- API errors use `ApiError` enum with Subsonic error codes
+- Return `error_response(format, &ApiError::...)` for API errors
+- Use `?` operator with proper error conversion
+
+```rust
+// In handlers, return early with error_response
+if song.is_none() {
+    return error_response(auth.format, &ApiError::NotFound("Song not found".into()))
+        .into_response();
+}
+```
+
+### Handler Pattern
+
+- First parameter is always `SubsonicAuth` (provides auth, format, state)
+- Query params use `axum::extract::Query<T>` with a dedicated struct
+- Return `impl IntoResponse`
+- Use `ok_*` helper functions from `response.rs`
+
+```rust
+pub async fn handler(
+    axum::extract::Query(params): axum::extract::Query<MyParams>,
+    auth: SubsonicAuth,
+) -> impl IntoResponse {
+    // Validate params, access auth.state for data, return response
+    ok_empty(auth.format)
+}
+```
+
+### Response Types
+
+- XML uses `@` prefix for attributes, `$text` for text content
+- JSON uses camelCase (transformed automatically)
+- Add new response types to both `xml` and `json` modules in `response.rs`
+
+### Database
+
+- Use repository pattern (`src/db/repository.rs`)
+- Schema managed via Diesel migrations in `migrations/`
+- Use `chrono::NaiveDateTime` for timestamps
+- Auto-generated schema in `src/db/schema.rs` - do not edit manually
 
 ### Adding a New Endpoint
 
-1. Add handler function in appropriate file under `src/api/handlers/`
+1. Add handler in `src/api/handlers/<category>.rs`
 2. Register route in `create_router()` in `src/main.rs` using `.subsonic_route()`
 3. Add response helper in `src/api/response.rs` if needed
-4. Add any needed `AuthState` methods and implement in `DatabaseAuthState`
+4. Add `AuthState` methods if data access is required
 
-### Adding a New Database Table
+### Adding Database Tables
 
-1. Create migration: `diesel migration generate <name>`
+1. `diesel migration generate <name>`
 2. Write `up.sql` and `down.sql`
-3. Run migration: `diesel migration run`
-4. Add table to `src/db/schema.rs` (or regenerate with `diesel print-schema`)
-5. Create model structs in `src/models/`
-6. Add repository methods in `src/db/repository.rs`
+3. `diesel migration run`
+4. Add model structs in `src/models/`
+5. Add repository methods in `src/db/repository.rs`
 
-### Modifying Authentication
+## Key Patterns
 
-The `AuthState` trait is the key abstraction. To add new auth-related functionality:
-1. Add method to `AuthState` trait in `src/api/auth.rs`
-2. Implement in `DatabaseAuthState`
-3. Use via `auth.state.method_name()` in handlers
+### AuthState Trait
+
+The `AuthState` trait abstracts data access for handlers. Add methods here for new data needs:
+
+```rust
+// In auth.rs
+pub trait AuthState: Send + Sync {
+    fn get_song(&self, id: i32) -> Option<Song>;
+    // Add new methods here
+}
+```
+
+### Dual Format Responses
+
+All responses must support both XML and JSON. The `SubsonicResponse` type handles this:
+
+```rust
+// In handlers
+ok_lyrics_list(auth.format, response)  // Returns correct format
+
+// In response.rs - add to both xml and json modules
+```
+
+### OpenSubsonic Extensions
+
+Register new extensions in `supported_extensions()` in `response.rs`:
+
+```rust
+pub fn supported_extensions() -> Vec<OpenSubsonicExtension> {
+    vec![
+        OpenSubsonicExtension::new("formPost", vec![1]),
+        OpenSubsonicExtension::new("songLyrics", vec![1]),
+    ]
+}
+```

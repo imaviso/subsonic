@@ -44,6 +44,7 @@ use crate::db::{
 use crate::models::User;
 use crate::models::music::{Album, Artist, MusicFolder, Song};
 use crate::scanner::ScanState;
+use crate::scanner::lyrics::ExtractedLyrics;
 use chrono::NaiveDateTime;
 
 /// Application state that must be available for auth.
@@ -316,6 +317,10 @@ pub trait AuthState: Send + Sync + 'static {
         video_conversion_role: Option<bool>,
         max_bit_rate: Option<i32>,
     ) -> Result<(), String>;
+
+    // Lyrics methods
+    /// Get lyrics for a song by reading embedded lyrics from the audio file.
+    fn get_song_lyrics(&self, song_id: i32) -> Vec<ExtractedLyrics>;
 
     // Scanning methods
     /// Get the database pool for scanning operations.
@@ -1219,6 +1224,20 @@ impl AuthState for DatabaseAuthState {
         self.song_repo
             .find_top_by_artist_name(artist_name, limit)
             .unwrap_or_default()
+    }
+
+    fn get_song_lyrics(&self, song_id: i32) -> Vec<ExtractedLyrics> {
+        use crate::scanner::lyrics::extract_lyrics;
+        use std::path::Path;
+
+        // Get the song to find its file path
+        let song = match self.get_song(song_id) {
+            Some(s) => s,
+            None => return Vec::new(),
+        };
+
+        // Extract lyrics from the audio file
+        extract_lyrics(Path::new(&song.path))
     }
 }
 

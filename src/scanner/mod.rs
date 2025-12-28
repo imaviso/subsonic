@@ -3,6 +3,8 @@
 //! Walks music folders, reads audio file metadata, and populates the database.
 //! Supports incremental scanning (only changed files) and auto-scan with configurable interval.
 
+pub mod lyrics;
+
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};

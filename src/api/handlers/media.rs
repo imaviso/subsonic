@@ -5,7 +5,7 @@ use axum::{
     http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
 };
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
@@ -13,6 +13,7 @@ use tokio_util::io::ReaderStream;
 use crate::api::auth::SubsonicAuth;
 use crate::api::error::ApiError;
 use crate::api::response::error_response;
+use crate::models::music::Song;
 
 /// Default cover art cache directory (same as in scanner).
 const COVER_ART_CACHE_DIR: &str = ".cache/subsonic/covers";
@@ -22,6 +23,37 @@ fn get_cover_art_dir() -> std::path::PathBuf {
     dirs::home_dir()
         .map(|h| h.join(COVER_ART_CACHE_DIR))
         .unwrap_or_else(|| std::path::PathBuf::from(COVER_ART_CACHE_DIR))
+}
+
+/// Validate that a song's path is within one of the configured music folders.
+/// This prevents path traversal attacks where a malicious path in the database
+/// could be used to read arbitrary files.
+fn validate_song_path(song: &Song, auth: &SubsonicAuth) -> Result<PathBuf, &'static str> {
+    let song_path = Path::new(&song.path);
+
+    // Canonicalize the song path to resolve any symlinks and ../ components
+    let canonical_path = match song_path.canonicalize() {
+        Ok(p) => p,
+        Err(_) => return Err("Audio file not found on disk"),
+    };
+
+    // Get all music folders and verify the song is within one of them
+    let music_folders = auth.state.get_music_folders();
+    for folder in &music_folders {
+        if let Ok(folder_canonical) = Path::new(&folder.path).canonicalize()
+            && canonical_path.starts_with(&folder_canonical)
+        {
+            return Ok(canonical_path);
+        }
+    }
+
+    // Song path is not within any music folder - potential path traversal
+    tracing::warn!(
+        "Path traversal attempt blocked: song {} has path outside music folders: {}",
+        song.id,
+        song.path
+    );
+    Err("Audio file not found in music library")
 }
 
 /// Query parameters for the stream endpoint.
@@ -84,18 +116,16 @@ pub async fn stream(
         return error_response(auth.format, &ApiError::NotAuthorized).into_response();
     }
 
-    // Get file path and check it exists
-    let path = Path::new(&song.path);
-    if !path.exists() {
-        return error_response(
-            auth.format,
-            &ApiError::NotFound("Audio file not found on disk".into()),
-        )
-        .into_response();
-    }
+    // Validate the song path is within a music folder (prevents path traversal)
+    let path = match validate_song_path(&song, &auth) {
+        Ok(p) => p,
+        Err(msg) => {
+            return error_response(auth.format, &ApiError::NotFound(msg.into())).into_response();
+        }
+    };
 
     // Open the file
-    let file = match File::open(path).await {
+    let file = match File::open(&path).await {
         Ok(f) => f,
         Err(_) => {
             return error_response(
@@ -226,24 +256,23 @@ pub async fn download(
         return error_response(auth.format, &ApiError::NotAuthorized).into_response();
     }
 
-    // Get file path and check it exists
-    let path = Path::new(&song.path);
-    if !path.exists() {
-        return error_response(
-            auth.format,
-            &ApiError::NotFound("Audio file not found on disk".into()),
-        )
-        .into_response();
-    }
+    // Validate the song path is within a music folder (prevents path traversal)
+    let path = match validate_song_path(&song, &auth) {
+        Ok(p) => p,
+        Err(msg) => {
+            return error_response(auth.format, &ApiError::NotFound(msg.into())).into_response();
+        }
+    };
 
-    // Get filename for Content-Disposition
+    // Get filename for Content-Disposition and sanitize it to prevent header injection
     let filename = path
         .file_name()
         .and_then(|n| n.to_str())
-        .unwrap_or("download");
+        .unwrap_or("download")
+        .replace(['"', '\r', '\n'], "");
 
     // Open the file
-    let file = match File::open(path).await {
+    let file = match File::open(&path).await {
         Ok(f) => f,
         Err(_) => {
             return error_response(

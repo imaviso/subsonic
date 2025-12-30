@@ -119,13 +119,21 @@ enum Commands {
 #[derive(Clone)]
 pub struct AppState {
     auth: Arc<DatabaseAuthState>,
+    scan_state: Arc<ScanState>,
 }
 
 impl AppState {
     pub fn new(pool: DbPool) -> Self {
+        let scan_state = Arc::new(ScanState::new());
         Self {
-            auth: Arc::new(DatabaseAuthState::new(pool)),
+            auth: Arc::new(DatabaseAuthState::with_scan_state(pool, scan_state.clone())),
+            scan_state,
         }
+    }
+
+    /// Get the shared scan state for use by AutoScanner.
+    pub fn scan_state(&self) -> Arc<ScanState> {
+        self.scan_state.clone()
     }
 }
 
@@ -479,11 +487,11 @@ async fn run_server(pool: DbPool, port: u16, auto_scan: bool, auto_scan_interval
     }
 
     let state = AppState::new(pool.clone());
-    let app = create_router(state);
+    let app = create_router(state.clone());
 
-    // Start auto-scanner if enabled
+    // Start auto-scanner if enabled, sharing the same scan state with the API
     let _auto_scan_handle = if auto_scan {
-        let scan_state = Arc::new(ScanState::new());
+        let scan_state = state.scan_state();
         let mut auto_scanner = AutoScanner::with_interval(pool, scan_state, auto_scan_interval);
         tracing::info!(
             "Auto-scan enabled with interval {} seconds",

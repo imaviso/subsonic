@@ -1,7 +1,7 @@
 //! Database connection pool and management.
 
 use diesel::prelude::*;
-use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
+use diesel::r2d2::{ConnectionManager, CustomizeConnection, Pool, PooledConnection};
 use diesel::sqlite::SqliteConnection;
 use std::time::Duration;
 
@@ -48,8 +48,46 @@ impl DbConfig {
         Pool::builder()
             .max_size(self.max_connections)
             .connection_timeout(Duration::from_secs(self.connection_timeout))
+            .connection_customizer(Box::new(SqliteConnectionCustomizer))
             .build(manager)
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+    }
+}
+
+/// Customizer that applies SQLite PRAGMAs to each new connection.
+/// This ensures all pooled connections have consistent settings.
+#[derive(Debug)]
+struct SqliteConnectionCustomizer;
+
+impl CustomizeConnection<SqliteConnection, diesel::r2d2::Error> for SqliteConnectionCustomizer {
+    fn on_acquire(&self, conn: &mut SqliteConnection) -> Result<(), diesel::r2d2::Error> {
+        // Set busy timeout to 5 seconds - SQLite will retry on lock contention
+        // instead of immediately returning SQLITE_BUSY
+        diesel::sql_query("PRAGMA busy_timeout = 5000")
+            .execute(conn)
+            .map_err(diesel::r2d2::Error::QueryError)?;
+
+        // Enable foreign keys (not inherited across connections)
+        diesel::sql_query("PRAGMA foreign_keys = ON")
+            .execute(conn)
+            .map_err(diesel::r2d2::Error::QueryError)?;
+
+        // Set synchronous to NORMAL for better write performance while still being safe
+        diesel::sql_query("PRAGMA synchronous = NORMAL")
+            .execute(conn)
+            .map_err(diesel::r2d2::Error::QueryError)?;
+
+        // Increase cache size for better read performance (negative = KB, so -64000 = 64MB)
+        diesel::sql_query("PRAGMA cache_size = -64000")
+            .execute(conn)
+            .map_err(diesel::r2d2::Error::QueryError)?;
+
+        // Enable memory-mapped I/O for faster reads (256MB)
+        diesel::sql_query("PRAGMA mmap_size = 268435456")
+            .execute(conn)
+            .map_err(diesel::r2d2::Error::QueryError)?;
+
+        Ok(())
     }
 }
 
@@ -57,21 +95,12 @@ impl DbConfig {
 pub fn run_migrations(conn: &mut SqliteConnection) -> Result<(), diesel::result::Error> {
     // Enable WAL mode for better concurrent read/write performance
     // WAL mode allows readers to not block writers and vice versa,
-    // which is important when scanning while serving API requests
+    // which is important when scanning while serving API requests.
+    // Note: WAL mode is persistent and only needs to be set once per database file.
     diesel::sql_query("PRAGMA journal_mode = WAL").execute(conn)?;
 
-    // Set synchronous to NORMAL for better write performance while still being safe
-    // NORMAL is safe with WAL mode and provides a good balance
-    diesel::sql_query("PRAGMA synchronous = NORMAL").execute(conn)?;
-
-    // Increase cache size for better read performance (negative = KB, so -64000 = 64MB)
-    diesel::sql_query("PRAGMA cache_size = -64000").execute(conn)?;
-
-    // Enable foreign keys
-    diesel::sql_query("PRAGMA foreign_keys = ON").execute(conn)?;
-
-    // Enable memory-mapped I/O for faster reads (256MB)
-    diesel::sql_query("PRAGMA mmap_size = 268435456").execute(conn)?;
+    // Other PRAGMAs (busy_timeout, synchronous, cache_size, foreign_keys, mmap_size)
+    // are set per-connection via SqliteConnectionCustomizer in build_pool().
 
     // Create users table
     diesel::sql_query(

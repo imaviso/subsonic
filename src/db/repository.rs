@@ -267,6 +267,11 @@ impl UserRepository {
     }
 
     /// Find a user by API key.
+    ///
+    /// Note: This uses a database query with an index lookup, which may be
+    /// vulnerable to timing attacks. For a personal music server this is
+    /// acceptable given the high entropy of API keys (128 bits). For higher
+    /// security requirements, consider storing and comparing API key hashes.
     pub fn find_by_api_key(&self, api_key: &str) -> Result<Option<User>, UserRepoError> {
         let mut conn = self.pool.get()?;
 

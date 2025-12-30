@@ -126,10 +126,15 @@ pub async fn get_starred2(auth: SubsonicAuth) -> impl IntoResponse {
 
     // Get starred artists
     let starred_artists = auth.state.get_starred_artists(user_id);
+
+    // Get album counts for all starred artists in a single batch query
+    let artist_ids: Vec<i32> = starred_artists.iter().map(|(a, _)| a.id).collect();
+    let album_counts = auth.state.get_artist_album_counts_batch(&artist_ids);
+
     let artists: Vec<StarredArtistID3Response> = starred_artists
         .iter()
         .map(|(artist, starred_at)| {
-            let album_count = auth.state.get_artist_album_count(artist.id) as i32;
+            let album_count = album_counts.get(&artist.id).copied().unwrap_or(0) as i32;
             StarredArtistID3Response::from_artist_and_starred(artist, Some(album_count), starred_at)
         })
         .collect();

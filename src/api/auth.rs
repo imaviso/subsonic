@@ -603,8 +603,13 @@ pub struct DatabaseAuthState {
 }
 
 impl DatabaseAuthState {
-    /// Create a new database auth state.
+    /// Create a new database auth state with its own scan state.
     pub fn new(pool: DbPool) -> Self {
+        Self::with_scan_state(pool, Arc::new(ScanState::new()))
+    }
+
+    /// Create a new database auth state with a shared scan state.
+    pub fn with_scan_state(pool: DbPool, scan_state: Arc<ScanState>) -> Self {
         Self {
             pool: pool.clone(),
             user_repo: UserRepository::new(pool.clone()),
@@ -618,7 +623,7 @@ impl DatabaseAuthState {
             rating_repo: RatingRepository::new(pool.clone()),
             playlist_repo: PlaylistRepository::new(pool.clone()),
             play_queue_repo: PlayQueueRepository::new(pool),
-            scan_state: Arc::new(ScanState::new()),
+            scan_state,
         }
     }
 

@@ -1396,17 +1396,8 @@ impl StarredRepository {
     pub fn star_artist(&self, user_id: i32, artist_id: i32) -> Result<(), MusicRepoError> {
         let mut conn = self.pool.get()?;
 
-        // Check if already starred
-        let existing = starred::table
-            .filter(starred::user_id.eq(user_id))
-            .filter(starred::artist_id.eq(artist_id))
-            .count()
-            .get_result::<i64>(&mut conn)?;
-
-        if existing > 0 {
-            return Ok(()); // Already starred
-        }
-
+        // Use INSERT OR IGNORE to handle race conditions atomically.
+        // If the entry already exists, this is a no-op.
         let new_starred = NewStarred {
             user_id,
             artist_id: Some(artist_id),
@@ -1414,7 +1405,7 @@ impl StarredRepository {
             song_id: None,
         };
 
-        diesel::insert_into(starred::table)
+        diesel::insert_or_ignore_into(starred::table)
             .values(&new_starred)
             .execute(&mut conn)?;
 
@@ -1425,17 +1416,6 @@ impl StarredRepository {
     pub fn star_album(&self, user_id: i32, album_id: i32) -> Result<(), MusicRepoError> {
         let mut conn = self.pool.get()?;
 
-        // Check if already starred
-        let existing = starred::table
-            .filter(starred::user_id.eq(user_id))
-            .filter(starred::album_id.eq(album_id))
-            .count()
-            .get_result::<i64>(&mut conn)?;
-
-        if existing > 0 {
-            return Ok(()); // Already starred
-        }
-
         let new_starred = NewStarred {
             user_id,
             artist_id: None,
@@ -1443,7 +1423,7 @@ impl StarredRepository {
             song_id: None,
         };
 
-        diesel::insert_into(starred::table)
+        diesel::insert_or_ignore_into(starred::table)
             .values(&new_starred)
             .execute(&mut conn)?;
 
@@ -1454,17 +1434,6 @@ impl StarredRepository {
     pub fn star_song(&self, user_id: i32, song_id: i32) -> Result<(), MusicRepoError> {
         let mut conn = self.pool.get()?;
 
-        // Check if already starred
-        let existing = starred::table
-            .filter(starred::user_id.eq(user_id))
-            .filter(starred::song_id.eq(song_id))
-            .count()
-            .get_result::<i64>(&mut conn)?;
-
-        if existing > 0 {
-            return Ok(()); // Already starred
-        }
-
         let new_starred = NewStarred {
             user_id,
             artist_id: None,
@@ -1472,7 +1441,7 @@ impl StarredRepository {
             song_id: Some(song_id),
         };
 
-        diesel::insert_into(starred::table)
+        diesel::insert_or_ignore_into(starred::table)
             .values(&new_starred)
             .execute(&mut conn)?;
 
@@ -1848,13 +1817,12 @@ impl NowPlayingRepository {
         song_id: i32,
         player_id: Option<&str>,
     ) -> Result<(), MusicRepoError> {
+        use diesel::upsert::excluded;
+
         let mut conn = self.pool.get()?;
 
-        // Delete any existing entry for this user
-        diesel::delete(now_playing::table.filter(now_playing::user_id.eq(user_id)))
-            .execute(&mut conn)?;
-
-        // Insert new entry
+        // Use upsert to atomically replace any existing entry for this user.
+        // This avoids race conditions that can occur with DELETE + INSERT.
         let new_entry = NewNowPlaying {
             user_id,
             song_id,
@@ -1863,6 +1831,14 @@ impl NowPlayingRepository {
 
         diesel::insert_into(now_playing::table)
             .values(&new_entry)
+            .on_conflict(now_playing::user_id)
+            .do_update()
+            .set((
+                now_playing::song_id.eq(excluded(now_playing::song_id)),
+                now_playing::player_id.eq(excluded(now_playing::player_id)),
+                now_playing::started_at.eq(diesel::dsl::now),
+                now_playing::minutes_ago.eq(0),
+            ))
             .execute(&mut conn)?;
 
         Ok(())
@@ -2090,35 +2066,17 @@ impl RatingRepository {
             )
             .execute(&mut conn)?;
         } else {
-            // Check if rating exists
-            let existing = user_ratings::table
-                .filter(user_ratings::user_id.eq(user_id))
-                .filter(user_ratings::song_id.eq(song_id))
-                .select(user_ratings::id)
-                .first::<i32>(&mut conn)
-                .optional()?;
-
-            if let Some(id) = existing {
-                // Update existing rating
-                diesel::update(user_ratings::table.filter(user_ratings::id.eq(id)))
-                    .set((
-                        user_ratings::rating.eq(rating),
-                        user_ratings::updated_at.eq(chrono::Utc::now().naive_utc()),
-                    ))
-                    .execute(&mut conn)?;
-            } else {
-                // Insert new rating
-                let new_rating = NewUserRating {
-                    user_id,
-                    song_id: Some(song_id),
-                    album_id: None,
-                    artist_id: None,
-                    rating,
-                };
-                diesel::insert_into(user_ratings::table)
-                    .values(&new_rating)
-                    .execute(&mut conn)?;
-            }
+            // Use upsert to atomically insert or update the rating
+            diesel::sql_query(
+                "INSERT INTO user_ratings (user_id, song_id, rating, updated_at)
+                 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                 ON CONFLICT (user_id, song_id) WHERE song_id IS NOT NULL
+                 DO UPDATE SET rating = excluded.rating, updated_at = CURRENT_TIMESTAMP",
+            )
+            .bind::<diesel::sql_types::Integer, _>(user_id)
+            .bind::<diesel::sql_types::Integer, _>(song_id)
+            .bind::<diesel::sql_types::Integer, _>(rating)
+            .execute(&mut conn)?;
         }
 
         Ok(())
@@ -2141,32 +2099,16 @@ impl RatingRepository {
             )
             .execute(&mut conn)?;
         } else {
-            let existing = user_ratings::table
-                .filter(user_ratings::user_id.eq(user_id))
-                .filter(user_ratings::album_id.eq(album_id))
-                .select(user_ratings::id)
-                .first::<i32>(&mut conn)
-                .optional()?;
-
-            if let Some(id) = existing {
-                diesel::update(user_ratings::table.filter(user_ratings::id.eq(id)))
-                    .set((
-                        user_ratings::rating.eq(rating),
-                        user_ratings::updated_at.eq(chrono::Utc::now().naive_utc()),
-                    ))
-                    .execute(&mut conn)?;
-            } else {
-                let new_rating = NewUserRating {
-                    user_id,
-                    song_id: None,
-                    album_id: Some(album_id),
-                    artist_id: None,
-                    rating,
-                };
-                diesel::insert_into(user_ratings::table)
-                    .values(&new_rating)
-                    .execute(&mut conn)?;
-            }
+            diesel::sql_query(
+                "INSERT INTO user_ratings (user_id, album_id, rating, updated_at)
+                 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                 ON CONFLICT (user_id, album_id) WHERE album_id IS NOT NULL
+                 DO UPDATE SET rating = excluded.rating, updated_at = CURRENT_TIMESTAMP",
+            )
+            .bind::<diesel::sql_types::Integer, _>(user_id)
+            .bind::<diesel::sql_types::Integer, _>(album_id)
+            .bind::<diesel::sql_types::Integer, _>(rating)
+            .execute(&mut conn)?;
         }
 
         Ok(())
@@ -2189,32 +2131,16 @@ impl RatingRepository {
             )
             .execute(&mut conn)?;
         } else {
-            let existing = user_ratings::table
-                .filter(user_ratings::user_id.eq(user_id))
-                .filter(user_ratings::artist_id.eq(artist_id))
-                .select(user_ratings::id)
-                .first::<i32>(&mut conn)
-                .optional()?;
-
-            if let Some(id) = existing {
-                diesel::update(user_ratings::table.filter(user_ratings::id.eq(id)))
-                    .set((
-                        user_ratings::rating.eq(rating),
-                        user_ratings::updated_at.eq(chrono::Utc::now().naive_utc()),
-                    ))
-                    .execute(&mut conn)?;
-            } else {
-                let new_rating = NewUserRating {
-                    user_id,
-                    song_id: None,
-                    album_id: None,
-                    artist_id: Some(artist_id),
-                    rating,
-                };
-                diesel::insert_into(user_ratings::table)
-                    .values(&new_rating)
-                    .execute(&mut conn)?;
-            }
+            diesel::sql_query(
+                "INSERT INTO user_ratings (user_id, artist_id, rating, updated_at)
+                 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                 ON CONFLICT (user_id, artist_id) WHERE artist_id IS NOT NULL
+                 DO UPDATE SET rating = excluded.rating, updated_at = CURRENT_TIMESTAMP",
+            )
+            .bind::<diesel::sql_types::Integer, _>(user_id)
+            .bind::<diesel::sql_types::Integer, _>(artist_id)
+            .bind::<diesel::sql_types::Integer, _>(rating)
+            .execute(&mut conn)?;
         }
 
         Ok(())
@@ -2450,6 +2376,32 @@ impl PlaylistRepository {
             .load(&mut conn)?;
 
         Ok(results.into_iter().map(|(_, s)| Song::from(s)).collect())
+    }
+
+    /// Get cover art IDs for multiple playlists in a single query.
+    /// Returns a map of playlist_id -> cover_art (from the first song in each playlist).
+    pub fn get_playlist_cover_arts_batch(
+        &self,
+        playlist_ids: &[i32],
+    ) -> Result<std::collections::HashMap<i32, String>, MusicRepoError> {
+        if playlist_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+
+        let mut conn = self.pool.get()?;
+
+        // Get the first song (position 0) for each playlist and join to get cover_art
+        let results: Vec<(i32, Option<String>)> = playlist_songs::table
+            .inner_join(songs::table.on(playlist_songs::song_id.eq(songs::id)))
+            .filter(playlist_songs::playlist_id.eq_any(playlist_ids))
+            .filter(playlist_songs::position.eq(0))
+            .select((playlist_songs::playlist_id, songs::cover_art))
+            .load(&mut conn)?;
+
+        Ok(results
+            .into_iter()
+            .filter_map(|(pid, cover)| cover.map(|c| (pid, c)))
+            .collect())
     }
 
     /// Create a new playlist.

@@ -503,11 +503,23 @@ async fn run_server(pool: DbPool, port: u16, auto_scan: bool, auto_scan_interval
     };
 
     let addr = format!("0.0.0.0:{}", port);
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    let listener = match tokio::net::TcpListener::bind(&addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            tracing::error!("Failed to bind to {}: {}", addr, e);
+            tracing::error!("Is another process already using port {}?", port);
+            std::process::exit(1);
+        }
+    };
     tracing::info!(
         "Subsonic server listening on {}",
-        listener.local_addr().unwrap()
+        listener
+            .local_addr()
+            .expect("listener should have local addr")
     );
 
-    axum::serve(listener, app).await.unwrap();
+    if let Err(e) = axum::serve(listener, app).await {
+        tracing::error!("Server error: {}", e);
+        std::process::exit(1);
+    }
 }

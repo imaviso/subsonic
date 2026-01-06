@@ -231,6 +231,11 @@ pub trait AuthState: Send + Sync + 'static {
     fn get_playlist(&self, playlist_id: i32) -> Option<Playlist>;
     /// Get songs in a playlist.
     fn get_playlist_songs(&self, playlist_id: i32) -> Vec<Song>;
+    /// Get cover art IDs for multiple playlists in batch.
+    fn get_playlist_cover_arts_batch(
+        &self,
+        playlist_ids: &[i32],
+    ) -> std::collections::HashMap<i32, String>;
     /// Create a new playlist.
     fn create_playlist(
         &self,
@@ -1008,6 +1013,15 @@ impl AuthState for DatabaseAuthState {
     fn get_playlist_songs(&self, playlist_id: i32) -> Vec<Song> {
         self.playlist_repo
             .get_playlist_songs(playlist_id)
+            .unwrap_or_default()
+    }
+
+    fn get_playlist_cover_arts_batch(
+        &self,
+        playlist_ids: &[i32],
+    ) -> std::collections::HashMap<i32, String> {
+        self.playlist_repo
+            .get_playlist_cover_arts_batch(playlist_ids)
             .unwrap_or_default()
     }
 

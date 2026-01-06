@@ -52,16 +52,14 @@ pub async fn get_playlists(
     // Get playlists for the user (including public playlists from others)
     let playlists = auth.state.get_playlists(user_id, username);
 
+    // Batch fetch cover art for all playlists
+    let playlist_ids: Vec<i32> = playlists.iter().map(|p| p.id).collect();
+    let cover_arts = auth.state.get_playlist_cover_arts_batch(&playlist_ids);
+
     let playlist_responses: Vec<PlaylistResponse> = playlists
         .iter()
         .map(|p| {
-            // Derive cover art from first song in playlist
-            let cover_art = if p.song_count > 0 {
-                let songs = auth.state.get_playlist_songs(p.id);
-                songs.first().and_then(|s| s.cover_art.clone())
-            } else {
-                None
-            };
+            let cover_art = cover_arts.get(&p.id).cloned();
             PlaylistResponse {
                 id: p.id.to_string(),
                 name: p.name.clone(),
@@ -115,6 +113,11 @@ pub async fn get_playlist(
                 .into_response();
         }
     };
+
+    // Check access: user must own the playlist or it must be public
+    if playlist.owner != auth.user.username && !playlist.public {
+        return error_response(auth.format, &ApiError::NotAuthorized).into_response();
+    }
 
     // Get the songs in the playlist
     let songs = auth.state.get_playlist_songs(playlist_id);

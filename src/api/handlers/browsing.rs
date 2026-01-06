@@ -240,13 +240,18 @@ pub async fn get_artist(
         .state
         .get_starred_at_for_artist(auth.user.id, artist_id);
 
-    // Get albums for the artist with their starred status
+    // Get albums for the artist with their starred status (batch lookup)
     let albums = auth.state.get_albums_by_artist(artist_id);
+    let album_ids: Vec<i32> = albums.iter().map(|a| a.id).collect();
+    let starred_map = auth
+        .state
+        .get_starred_at_for_albums_batch(auth.user.id, &album_ids);
+
     let album_responses: Vec<AlbumID3Response> = albums
         .iter()
         .map(|album| {
-            let starred_at = auth.state.get_starred_at_for_album(auth.user.id, album.id);
-            AlbumID3Response::from_album_with_starred(album, starred_at.as_ref())
+            let starred_at = starred_map.get(&album.id);
+            AlbumID3Response::from_album_with_starred(album, starred_at)
         })
         .collect();
 

@@ -112,6 +112,38 @@ pub struct ScanState {
     scanning: AtomicBool,
     /// Number of items scanned so far.
     count: AtomicU64,
+    /// Total number of items to scan (0 if unknown/discovery phase).
+    total: AtomicU64,
+    /// Current scan phase.
+    phase: std::sync::RwLock<ScanPhase>,
+    /// Current folder being scanned (if any).
+    current_folder: std::sync::RwLock<Option<String>>,
+}
+
+/// Scan phase for progress tracking.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum ScanPhase {
+    /// Not scanning.
+    #[default]
+    Idle,
+    /// Discovering files on disk.
+    Discovering,
+    /// Processing/importing tracks.
+    Processing,
+    /// Cleaning up orphaned records.
+    Cleaning,
+}
+
+impl ScanPhase {
+    /// Get the phase as a string for API responses.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ScanPhase::Idle => "idle",
+            ScanPhase::Discovering => "discovering",
+            ScanPhase::Processing => "processing",
+            ScanPhase::Cleaning => "cleaning",
+        }
+    }
 }
 
 impl ScanState {
@@ -120,6 +152,9 @@ impl ScanState {
         Self {
             scanning: AtomicBool::new(false),
             count: AtomicU64::new(0),
+            total: AtomicU64::new(0),
+            phase: std::sync::RwLock::new(ScanPhase::Idle),
+            current_folder: std::sync::RwLock::new(None),
         }
     }
 
@@ -133,6 +168,21 @@ impl ScanState {
         self.count.load(Ordering::SeqCst)
     }
 
+    /// Get the total item count (0 if unknown).
+    pub fn get_total(&self) -> u64 {
+        self.total.load(Ordering::SeqCst)
+    }
+
+    /// Get the current scan phase.
+    pub fn get_phase(&self) -> ScanPhase {
+        self.phase.read().unwrap().clone()
+    }
+
+    /// Get the current folder being scanned.
+    pub fn get_current_folder(&self) -> Option<String> {
+        self.current_folder.read().unwrap().clone()
+    }
+
     /// Try to start a scan. Returns false if a scan is already in progress.
     pub fn try_start(&self) -> bool {
         self.scanning
@@ -143,11 +193,21 @@ impl ScanState {
     /// Mark the scan as complete.
     pub fn finish(&self) {
         self.scanning.store(false, Ordering::SeqCst);
+        *self.phase.write().unwrap() = ScanPhase::Idle;
+        *self.current_folder.write().unwrap() = None;
     }
 
     /// Reset the count to 0.
     pub fn reset_count(&self) {
         self.count.store(0, Ordering::SeqCst);
+    }
+
+    /// Reset all progress state for a new scan.
+    pub fn reset(&self) {
+        self.count.store(0, Ordering::SeqCst);
+        self.total.store(0, Ordering::SeqCst);
+        *self.phase.write().unwrap() = ScanPhase::Idle;
+        *self.current_folder.write().unwrap() = None;
     }
 
     /// Increment the count by 1 and return the new value.
@@ -158,6 +218,21 @@ impl ScanState {
     /// Set the count to a specific value.
     pub fn set_count(&self, value: u64) {
         self.count.store(value, Ordering::SeqCst);
+    }
+
+    /// Set the total item count.
+    pub fn set_total(&self, value: u64) {
+        self.total.store(value, Ordering::SeqCst);
+    }
+
+    /// Set the current scan phase.
+    pub fn set_phase(&self, phase: ScanPhase) {
+        *self.phase.write().unwrap() = phase;
+    }
+
+    /// Set the current folder being scanned.
+    pub fn set_current_folder(&self, folder: Option<String>) {
+        *self.current_folder.write().unwrap() = folder;
     }
 }
 
@@ -357,6 +432,11 @@ impl Scanner {
         let mut total_result = ScanResult::default();
 
         for folder in &folders {
+            // Update scan state with current folder
+            if let Some(ref s) = state {
+                s.set_current_folder(Some(folder.name.clone()));
+            }
+
             println!(
                 "Scanning folder: {} ({}) [mode: {:?}]",
                 folder.name, folder.path, mode
@@ -380,6 +460,11 @@ impl Scanner {
         }
 
         // Clean up orphaned artists and albums after scanning all folders
+        if let Some(ref s) = state {
+            s.set_phase(ScanPhase::Cleaning);
+            s.set_current_folder(None);
+        }
+
         if let Err(e) = self.cleanup_orphans() {
             eprintln!("Warning: Failed to cleanup orphaned records: {}", e);
         }
@@ -424,12 +509,25 @@ impl Scanner {
             return Err(ScanError::FolderNotFound(folder.path.clone()));
         }
 
+        // Set discovery phase
+        if let Some(ref s) = state {
+            s.set_phase(ScanPhase::Discovering);
+        }
+
         // Get existing songs in this folder for incremental scanning
         let existing_songs = self.get_existing_songs(folder.id)?;
 
         // Collect all audio files on disk
         let (tracks, discovered_paths) = self.discover_tracks_with_paths(folder_path, folder)?;
         result.tracks_found = tracks.len();
+
+        // Set total count now that we know how many files to process
+        if let Some(ref s) = state {
+            // Add to total (accumulates across folders)
+            let current_total = s.get_total();
+            s.set_total(current_total + tracks.len() as u64);
+            s.set_phase(ScanPhase::Processing);
+        }
 
         println!("  Found {} audio files on disk", tracks.len());
 

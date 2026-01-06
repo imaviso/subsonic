@@ -57,6 +57,25 @@ pub enum ResponseStatus {
 }
 
 // ============================================================================
+// Scan Status Types
+// ============================================================================
+
+/// Enhanced scan status data for API responses.
+#[derive(Debug, Clone, Default)]
+pub struct ScanStatusData {
+    /// Whether a scan is currently in progress.
+    pub scanning: bool,
+    /// Number of items scanned so far.
+    pub count: u64,
+    /// Total number of items to scan (0 if unknown).
+    pub total: u64,
+    /// Current scan phase (idle, discovering, processing, cleaning).
+    pub phase: String,
+    /// Current folder being scanned (if any).
+    pub folder: Option<String>,
+}
+
+// ============================================================================
 // OpenSubsonic Extension Types
 // ============================================================================
 
@@ -918,6 +937,32 @@ mod xml {
         pub scanning: bool,
         #[serde(rename = "@count")]
         pub count: u64,
+        #[serde(rename = "@total", skip_serializing_if = "Option::is_none")]
+        pub total: Option<u64>,
+        #[serde(rename = "@phase", skip_serializing_if = "Option::is_none")]
+        pub phase: Option<String>,
+        #[serde(rename = "@folder", skip_serializing_if = "Option::is_none")]
+        pub folder: Option<String>,
+    }
+
+    impl ScanStatus {
+        pub fn from_data(data: &super::ScanStatusData) -> Self {
+            Self {
+                scanning: data.scanning,
+                count: data.count,
+                total: if data.total > 0 {
+                    Some(data.total)
+                } else {
+                    None
+                },
+                phase: if data.scanning {
+                    Some(data.phase.clone())
+                } else {
+                    None
+                },
+                folder: data.folder.clone(),
+            }
+        }
     }
 
     #[derive(Debug, Serialize)]
@@ -940,7 +985,7 @@ mod xml {
     }
 
     impl ScanStatusResponse {
-        pub fn new(scanning: bool, count: u64) -> Self {
+        pub fn from_data(data: &super::ScanStatusData) -> Self {
             Self {
                 xmlns: "http://subsonic.org/restapi",
                 status: ResponseStatus::Ok,
@@ -948,7 +993,7 @@ mod xml {
                 server_type: SERVER_NAME,
                 server_version: SERVER_VERSION,
                 open_subsonic: true,
-                scan_status: ScanStatus { scanning, count },
+                scan_status: ScanStatus::from_data(data),
             }
         }
     }
@@ -1523,6 +1568,32 @@ mod json {
     pub struct ScanStatusJson {
         pub scanning: bool,
         pub count: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub total: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub phase: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub folder: Option<String>,
+    }
+
+    impl ScanStatusJson {
+        pub fn from_data(data: &super::ScanStatusData) -> Self {
+            Self {
+                scanning: data.scanning,
+                count: data.count,
+                total: if data.total > 0 {
+                    Some(data.total)
+                } else {
+                    None
+                },
+                phase: if data.scanning {
+                    Some(data.phase.clone())
+                } else {
+                    None
+                },
+                folder: data.folder.clone(),
+            }
+        }
     }
 
     /// Empty bookmarks response for JSON format.
@@ -1764,8 +1835,8 @@ mod json {
             self
         }
 
-        pub fn with_scan_status(mut self, scanning: bool, count: u64) -> Self {
-            self.scan_status = Some(ScanStatusJson { scanning, count });
+        pub fn with_scan_status(mut self, data: &super::ScanStatusData) -> Self {
+            self.scan_status = Some(ScanStatusJson::from_data(data));
             self
         }
 
@@ -1883,7 +1954,7 @@ enum ResponseKind {
     TokenInfo(TokenInfoResponse),
     User(UserResponse),
     Users(UsersResponse),
-    ScanStatus { scanning: bool, count: u64 },
+    ScanStatus(ScanStatusData),
     Bookmarks,
     ArtistInfo2(ArtistInfo2Response),
     AlbumInfo(AlbumInfoResponse),
@@ -2079,10 +2150,10 @@ impl SubsonicResponse {
         }
     }
 
-    pub fn scan_status(format: Format, scanning: bool, count: u64) -> Self {
+    pub fn scan_status(format: Format, data: ScanStatusData) -> Self {
         Self {
             format,
-            kind: ResponseKind::ScanStatus { scanning, count },
+            kind: ResponseKind::ScanStatus(data),
         }
     }
 
@@ -2265,8 +2336,8 @@ impl SubsonicResponse {
             }
             ResponseKind::User(user) => quick_xml::se::to_string(&xml::UserResponse::new(user)),
             ResponseKind::Users(users) => quick_xml::se::to_string(&xml::UsersResponse::new(users)),
-            ResponseKind::ScanStatus { scanning, count } => {
-                quick_xml::se::to_string(&xml::ScanStatusResponse::new(scanning, count))
+            ResponseKind::ScanStatus(data) => {
+                quick_xml::se::to_string(&xml::ScanStatusResponse::from_data(&data))
             }
             ResponseKind::Bookmarks => quick_xml::se::to_string(&xml::BookmarksResponse::new()),
             ResponseKind::ArtistInfo2(artist_info2) => {
@@ -2387,9 +2458,9 @@ impl SubsonicResponse {
                 .wrap(),
             ResponseKind::User(user) => json::SubsonicResponse::ok().with_user(user).wrap(),
             ResponseKind::Users(users) => json::SubsonicResponse::ok().with_users(users).wrap(),
-            ResponseKind::ScanStatus { scanning, count } => json::SubsonicResponse::ok()
-                .with_scan_status(scanning, count)
-                .wrap(),
+            ResponseKind::ScanStatus(data) => {
+                json::SubsonicResponse::ok().with_scan_status(&data).wrap()
+            }
             ResponseKind::Bookmarks => json::SubsonicResponse::ok().with_bookmarks().wrap(),
             ResponseKind::ArtistInfo2(artist_info2) => json::SubsonicResponse::ok()
                 .with_artist_info2(artist_info2)
@@ -2617,8 +2688,8 @@ pub fn ok_users(format: Format, users: UsersResponse) -> SubsonicResponse {
 }
 
 /// Helper function to create a scan status response.
-pub fn ok_scan_status(format: Format, scanning: bool, count: u64) -> SubsonicResponse {
-    SubsonicResponse::scan_status(format, scanning, count)
+pub fn ok_scan_status(format: Format, data: ScanStatusData) -> SubsonicResponse {
+    SubsonicResponse::scan_status(format, data)
 }
 
 /// Helper function to create an empty bookmarks response.

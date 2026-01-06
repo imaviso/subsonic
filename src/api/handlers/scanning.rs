@@ -3,8 +3,20 @@
 use axum::response::IntoResponse;
 
 use crate::api::auth::SubsonicAuth;
-use crate::api::response::ok_scan_status;
+use crate::api::response::{ScanStatusData, ok_scan_status};
 use crate::scanner::Scanner;
+
+/// Build a ScanStatusData from the current scan state.
+fn build_scan_status_data(auth: &SubsonicAuth) -> ScanStatusData {
+    let scan_state = auth.state.get_scan_state();
+    ScanStatusData {
+        scanning: scan_state.is_scanning(),
+        count: scan_state.get_count(),
+        total: scan_state.get_total(),
+        phase: scan_state.get_phase().as_str().to_string(),
+        folder: scan_state.get_current_folder(),
+    }
+}
 
 /// GET/POST /rest/startScan[.view]
 ///
@@ -56,11 +68,8 @@ pub async fn start_scan(auth: SubsonicAuth) -> impl IntoResponse {
     }
 
     // Return current status (scanning should be true now)
-    ok_scan_status(
-        auth.format,
-        scan_state.is_scanning(),
-        scan_state.get_count(),
-    )
+    let data = build_scan_status_data(&auth);
+    ok_scan_status(auth.format, data)
 }
 
 /// GET/POST /rest/getScanStatus[.view]
@@ -69,10 +78,6 @@ pub async fn start_scan(auth: SubsonicAuth) -> impl IntoResponse {
 ///
 /// Returns: scanStatus with scanning=true/false and count of items scanned.
 pub async fn get_scan_status(auth: SubsonicAuth) -> impl IntoResponse {
-    let scan_state = auth.state.get_scan_state();
-    ok_scan_status(
-        auth.format,
-        scan_state.is_scanning(),
-        scan_state.get_count(),
-    )
+    let data = build_scan_status_data(&auth);
+    ok_scan_status(auth.format, data)
 }

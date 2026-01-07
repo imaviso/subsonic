@@ -35,12 +35,6 @@ jobs:
             archive: subsonic-linux-aarch64.tar.gz
             cross: true
 
-          # macOS Intel
-          - target: x86_64-apple-darwin
-            os: macos-13
-            artifact: subsonic
-            archive: subsonic-macos-x86_64.tar.gz
-
           # macOS Apple Silicon
           - target: aarch64-apple-darwin
             os: macos-latest

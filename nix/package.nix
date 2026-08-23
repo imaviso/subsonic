@@ -4,7 +4,6 @@
   pkg-config,
   openssl,
   stdenv,
-  darwin,
 }: let
   cargoToml = lib.importTOML ../Cargo.toml;
 in
@@ -22,11 +21,7 @@ in
 
     nativeBuildInputs = [pkg-config];
 
-    buildInputs =
-      lib.optionals stdenv.hostPlatform.isLinux [openssl]
-      ++ lib.optionals stdenv.hostPlatform.isDarwin [
-        darwin.apple_sdk.frameworks.Security
-      ];
+    buildInputs = lib.optionals stdenv.hostPlatform.isLinux [ openssl ];
 
     env.OPENSSL_NO_VENDOR = 1;
 

@@ -109,6 +109,7 @@ fn parse_byte_range(range: &str, file_size: u64) -> Option<ByteRange> {
     Some(ByteRange { start, end })
 }
 
+#[allow(clippy::result_large_err, reason = "Response is large by design")]
 async fn open_file_with_size(
     auth: &SubsonicContext,
     path: &Path,
@@ -127,6 +128,7 @@ async fn open_file_with_size(
     Ok((file, metadata.len()))
 }
 
+#[allow(clippy::result_large_err, reason = "Response is large by design")]
 async fn read_cover_art_bytes(
     auth: &SubsonicContext,
     path: &Path,

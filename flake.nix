@@ -26,20 +26,22 @@
 
       checks = {
         default = self.packages.${system}.default;
-        clippy = pkgs.stdenv.mkDerivation {
-          name = "clippy";
-          src = ./.;
-          nativeBuildInputs = with pkgs; [
-            rustToolchain
-            pkg-config
-          ];
-          buildInputs = with pkgs; [
-            openssl
-          ];
+        clippy = pkgs.rustPlatform.buildRustPackage {
+          pname = "suboxide-clippy";
+          version = (pkgs.lib.importTOML ./Cargo.toml).package.version;
+          src = pkgs.lib.cleanSource ./.;
+          cargoLock.lockFile = ./Cargo.lock;
+          nativeBuildInputs = with pkgs; [ rustToolchain pkg-config ];
+          buildInputs = with pkgs;
+            [ openssl ]
+            ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
+              darwin.apple_sdk.frameworks.Security
+            ];
           buildPhase = ''
             cargo clippy --all-targets -- -D warnings
           '';
           installPhase = "mkdir -p $out; touch $out/done";
+          doCheck = false;
         };
         fmt = pkgs.stdenv.mkDerivation {
           name = "fmt";

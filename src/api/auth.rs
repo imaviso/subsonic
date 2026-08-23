@@ -203,6 +203,10 @@ where
 {
     type Rejection = Response;
 
+    #[allow(
+        clippy::unused_async_trait_impl,
+        reason = "from_request_parts must be async via trait"
+    )]
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let normalized = parts
             .extensions
@@ -338,6 +342,10 @@ where
     #[expect(
         clippy::too_many_lines,
         reason = "Extractor validates multiple auth flows and transports in one place"
+    )]
+    #[allow(
+        clippy::unused_async_trait_impl,
+        reason = "from_request must be async via trait"
     )]
     async fn from_request(req: Request<Body>, state: &S) -> Result<Self, Self::Rejection> {
         // Extract query parameters first (they exist in both GET and POST)
